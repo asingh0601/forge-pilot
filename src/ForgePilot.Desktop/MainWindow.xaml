@@ -144,7 +144,7 @@
                                      MinHeight="42"
                                      MaxHeight="220"
                                      VerticalScrollBarVisibility="Auto"
-                                     KeyDown="InputTextBox_KeyDown"/>
+                                     PreviewKeyDown="InputTextBox_PreviewKeyDown"/>
 
                             <TextBlock Text="Reply to Claude…"
                                        Margin="14,9,0,0"

@@ -95,4 +95,20 @@
     <None Include="source.extension.vsixmanifest" SubType="Designer" />
   </ItemGroup>
 
+  <!--
+    Extension icon and Marketplace preview. IncludeInVSIX is what actually gets
+    them into the package — a plain None item would be referenced by the
+    manifest but absent from the .vsix, which fails validation at install time.
+    Condition-guarded so the build still succeeds before the logo is generated;
+    see assets/make-icons.ps1.
+  -->
+  <ItemGroup>
+    <None Include="Resources\icon.png" Condition="Exists('Resources\icon.png')">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </None>
+    <None Include="Resources\preview.png" Condition="Exists('Resources\preview.png')">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </None>
+  </ItemGroup>
+
 </Project>

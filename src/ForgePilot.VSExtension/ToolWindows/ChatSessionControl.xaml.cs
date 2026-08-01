@@ -268,32 +268,11 @@ public partial class ChatSessionControl : UserControl
         _ = ChatWebView.ApplyCurrentThemeAsync();
     }
 
+    // Send / interrupt live in InputTextBox_PreviewKeyDown — see the note there
+    // on why the bubbling KeyDown never sees Enter. Kept as a no-op so the XAML
+    // binding stays valid and the two paths can't drift apart.
     private void InputTextBox_KeyDown(object sender, KeyEventArgs e)
     {
-        // Esc interrupts a running turn.
-        if (e.Key == Key.Escape &&
-            DataContext is ChatSessionViewModel busyVm &&
-            busyVm.StopCommand.CanExecute(null))
-        {
-            busyVm.StopCommand.Execute(null);
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Key != Key.Enter) return;
-
-        // Enter sends; Shift+Enter inserts a newline. Ctrl+Enter still sends,
-        // since that was the previous binding and muscle memory is cheap to
-        // honour. The mention popup owns Enter while it's open — it is handled
-        // in PreviewKeyDown, so this never runs in that case.
-        var shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
-        if (shift) return;
-
-        if (DataContext is ChatSessionViewModel vm && vm.SendCommand.CanExecute(null))
-        {
-            vm.SendCommand.Execute(null);
-            e.Handled = true;
-        }
     }
 
     private void ResizeGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -442,24 +421,54 @@ public partial class ChatSessionControl : UserControl
 
     private void InputTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (!MentionPopup.IsOpen) return;
+        // The mention popup owns the navigation keys while it's open.
+        if (MentionPopup.IsOpen)
+        {
+            switch (e.Key)
+            {
+                case Key.Down:
+                    MoveMentionSelection(+1);
+                    e.Handled = true;
+                    break;
+                case Key.Up:
+                    MoveMentionSelection(-1);
+                    e.Handled = true;
+                    break;
+                case Key.Enter:
+                case Key.Tab:
+                    if (CommitMentionSelection()) e.Handled = true;
+                    break;
+                case Key.Escape:
+                    CloseMentionPopup();
+                    e.Handled = true;
+                    break;
+            }
+            return;
+        }
 
+        // Send/interrupt must be handled here, in the tunnelling event, not in
+        // KeyDown. With AcceptsReturn="True" the TextBox class handler consumes
+        // Enter to insert a newline and marks it handled, and class handlers run
+        // before instance handlers on the bubbling event — so a KeyDown handler
+        // for Enter is never invoked. That is why this was Ctrl+Enter upstream.
         switch (e.Key)
         {
-            case Key.Down:
-                MoveMentionSelection(+1);
+            case Key.Escape when DataContext is ChatSessionViewModel busyVm
+                                 && busyVm.StopCommand.CanExecute(null):
+                busyVm.StopCommand.Execute(null);
                 e.Handled = true;
                 break;
-            case Key.Up:
-                MoveMentionSelection(-1);
-                e.Handled = true;
-                break;
-            case Key.Enter:
-            case Key.Tab:
-                if (CommitMentionSelection()) e.Handled = true;
-                break;
-            case Key.Escape:
-                CloseMentionPopup();
+
+            case Key.Enter when (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift:
+                // Shift+Enter falls through to the TextBox and inserts a newline.
+                if (DataContext is ChatSessionViewModel vm && vm.SendCommand.CanExecute(null))
+                {
+                    vm.SendCommand.Execute(null);
+                }
+
+                // Handled either way: without this, an Enter pressed while the
+                // input is empty or a turn is running would insert a stray
+                // newline instead of doing nothing.
                 e.Handled = true;
                 break;
         }
