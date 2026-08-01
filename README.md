@@ -41,13 +41,17 @@ This layer is read-only by design. The CLI owns these features outright — it r
 
 ## 🚀 Installation
 
-ForgePilot has no Marketplace listing — build and install it yourself:
+ForgePilot has no Marketplace listing — build and install it yourself. The .NET 10 SDK is enough to produce the VSIX; you do not need Visual Studio installed to build it:
 
-1. Open `src/ForgePilot.slnx` in Visual Studio 2026 with the **Visual Studio extension development** workload installed.
-2. Build in `Release`; the VSIX lands in `src/ForgePilot.VSExtension/bin/Release/`.
-3. Double-click the `.vsix` to install, then restart Visual Studio.
+```
+dotnet build src/ForgePilot.slnx -c Release
+```
 
-To develop against it, set `ForgePilot.VSExtension` as the startup project and press **F5** — that launches the VS experimental instance.
+The package lands at `src/ForgePilot.VSExtension/bin/Release/net472/ForgePilot.VSExtension.vsix`. Double-click it, then restart Visual Studio.
+
+To develop against it, open `src/ForgePilot.slnx` in Visual Studio 2026 with the **Visual Studio extension development** workload, set `ForgePilot.VSExtension` as the startup project, and press **F5** — that launches the VS experimental instance.
+
+Because ForgePilot carries its own extension identity, it installs alongside upstream VsAgentic rather than replacing it, and keeps its sessions in a separate directory. You can run both and compare.
 
 ---
 
@@ -102,11 +106,13 @@ src/ForgePilot.slnx
 └── ForgePilot.Console/       # Console host (for development & testing)
 ```
 
-`ForgePilot.Desktop` hosts the same transcript renderer and input chrome as the extension, so UI changes can be checked without launching a VS experimental instance:
+`ForgePilot.Desktop` hosts the same transcript renderer, composer and banners as the extension, so UI changes can be checked without launching a VS experimental instance:
 
 ```
-ForgePilot.Desktop.exe D:\path\to\some\repo
+src\ForgePilot.Desktop\bin\Debug\net472\ForgePilot.Desktop.exe D:\path\to\some\repo
 ```
+
+Both hosts share everything visual: `ForgePilot.UI` owns the WebView2 transcript, the theme dictionaries, and the permission / question / login banner views. The VS extension adds only the tool-window plumbing, the `@`-mention file picker, and the session list.
 
 ---
 

@@ -1,6 +1,6 @@
 using System.Windows.Controls;
 
-namespace ForgePilot.VSExtension.ToolWindows.Banners;
+namespace ForgePilot.UI.Controls.Banners;
 
 public partial class QuestionCardControl : UserControl
 {

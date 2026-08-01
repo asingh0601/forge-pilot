@@ -1,0 +1,88 @@
+<UserControl x:Class="ForgePilot.UI.Controls.Banners.PermissionBannerControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/ForgePilot.UI;component/Themes/BannerStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Style="{StaticResource BannerCardBorderStyle}">
+        <StackPanel Margin="16,14">
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <!-- Accent dot rather than a warning icon: this is a routine
+                     confirmation, not an error. -->
+                <Border Width="7" Height="7" CornerRadius="4"
+                        Background="{DynamicResource FpAccent}"
+                        VerticalAlignment="Center"
+                        Margin="0,0,9,0"/>
+                <TextBlock Text="{Binding Header}"
+                           FontWeight="SemiBold"
+                           FontSize="13.5"
+                           Foreground="{DynamicResource FpForeground}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- The command or path in question. Monospace, because it's literal
+                 text the user is being asked to vouch for. -->
+            <Border Visibility="{Binding HasBodyText, Converter={StaticResource BoolToVis}}"
+                    Background="{DynamicResource FpBackground}"
+                    BorderBrush="{DynamicResource FpBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="11,8"
+                    Margin="0,2,0,12">
+                <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+                    <TextBlock Text="{Binding BodyText}"
+                               FontFamily="{DynamicResource FpFontMono}"
+                               FontSize="12"
+                               Foreground="{DynamicResource FpMuted}"
+                               TextWrapping="Wrap"/>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Initial state: Allow / Deny / Other… -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        Visibility="{Binding IsInitialMode, Converter={StaticResource BoolToVis}}">
+                <Button Content="Allow"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Command="{Binding AllowCommand}"/>
+                <Button Content="Deny"
+                        Style="{StaticResource DangerButtonStyle}"
+                        Command="{Binding DenyCommand}"/>
+                <Button Content="Other…"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Command="{Binding OtherCommand}"/>
+            </StackPanel>
+
+            <!-- Other… state: free-text alternative instructions. Sent as a deny
+                 carrying the user's wording, so Claude reads it as the tool
+                 result and follows it instead of re-asking. -->
+            <StackPanel Visibility="{Binding IsOtherMode, Converter={StaticResource BoolToVis}}">
+                <TextBox Style="{StaticResource BannerInputTextBoxStyle}"
+                         Text="{Binding AlternativeText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Tell Claude what to do instead"/>
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,9,0,0">
+                    <Button Style="{StaticResource ChevronButtonStyle}"
+                            Command="{Binding BackCommand}"
+                            ToolTip="Back to Allow / Deny"
+                            Margin="0,0,8,0">
+                        <TextBlock Text="←" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button Content="Submit"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Margin="0"
+                            Command="{Binding SubmitCommand}"/>
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

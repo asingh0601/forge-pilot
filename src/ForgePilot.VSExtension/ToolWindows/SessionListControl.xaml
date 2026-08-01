@@ -8,26 +8,26 @@
 
     <UserControl.Resources>
         <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource {x:Static vs:VsBrushes.WindowTextKey}}" />
+            <Setter Property="Foreground" Value="{DynamicResource FpForeground}" />
         </Style>
 
-        <!-- Fluent-rounded Button (used as implicit style for toolbar buttons like "New Session") -->
+        <!-- Toolbar button. "New Session" is the only one here and it's the
+             primary action of the panel, so it takes the accent fill. -->
         <Style TargetType="Button">
             <Setter Property="Margin" Value="2" />
-            <Setter Property="Padding" Value="10,5" />
-            <Setter Property="Background" Value="{DynamicResource {x:Static vs:VsBrushes.ButtonFaceKey}}" />
-            <Setter Property="Foreground" Value="{DynamicResource {x:Static vs:VsBrushes.ButtonTextKey}}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static vs:VsBrushes.ComboBoxBorderKey}}" />
-            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14,7" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Background" Value="{DynamicResource FpAccent}" />
+            <Setter Property="Foreground" Value="{DynamicResource FpAccentForeground}" />
+            <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border"
                                 Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
+                                CornerRadius="9">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
                                               Margin="{TemplateBinding Padding}" />
@@ -35,18 +35,13 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background"
-                                        Value="{DynamicResource {x:Static vs:VsBrushes.CommandBarMouseOverBackgroundGradientKey}}" />
-                                <Setter TargetName="border" Property="BorderBrush"
-                                        Value="{DynamicResource {x:Static vs:VsBrushes.ComboBoxBorderKey}}" />
+                                        Value="{DynamicResource FpAccentHover}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background"
-                                        Value="{DynamicResource {x:Static vs:VsBrushes.CommandBarMouseDownBackgroundGradientKey}}" />
-                                <Setter TargetName="border" Property="BorderBrush"
-                                        Value="{DynamicResource {x:Static vs:VsBrushes.ComboBoxBorderKey}}" />
+                                <Setter TargetName="border" Property="Opacity" Value="0.8" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5" />
+                                <Setter Property="Opacity" Value="0.45" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -80,7 +75,7 @@
         <!-- Fluent-rounded ListBox (transparent, unbordered by default) -->
         <Style TargetType="ListBox">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource {x:Static vs:VsBrushes.WindowTextKey}}" />
+            <Setter Property="Foreground" Value="{DynamicResource FpForeground}" />
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
@@ -119,11 +114,11 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background"
-                                        Value="{DynamicResource {x:Static vs:VsBrushes.CommandBarMouseOverBackgroundGradientKey}}" />
+                                        Value="{DynamicResource FpSurfaceSubtle}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="border" Property="Background"
-                                        Value="{DynamicResource {x:Static vs:VsBrushes.CommandBarSelectedKey}}" />
+                                        Value="{DynamicResource FpAccentSubtle}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -133,7 +128,7 @@
 
         <!-- Delete button: transparent pill, shown on row hover, overlaid above text -->
         <Style x:Key="DeleteButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource {x:Static vs:VsBrushes.CommandBarMouseOverBackgroundGradientKey}}" />
+            <Setter Property="Background" Value="{DynamicResource FpSurfaceSubtle}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="4,2" />
             <Setter Property="Margin" Value="0" />
@@ -154,7 +149,7 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background"
-                                        Value="{DynamicResource {x:Static vs:VsBrushes.CommandBarMouseDownBackgroundGradientKey}}" />
+                                        Value="{DynamicResource FpSelection}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -168,7 +163,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Background="{DynamicResource {x:Static vs:VsBrushes.ToolWindowBackgroundKey}}">
+    <Grid Background="{DynamicResource FpBackground}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -186,9 +181,9 @@
                      Style="{StaticResource FluentTextBoxStyle}"
                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                      Padding="10,2,4,2"
-                     Background="{DynamicResource {x:Static vs:VsBrushes.ComboBoxBackgroundKey}}"
-                     Foreground="{DynamicResource {x:Static vs:VsBrushes.WindowTextKey}}"
-                     BorderBrush="{DynamicResource {x:Static vs:VsBrushes.ComboBoxBorderKey}}" />
+                     Background="{DynamicResource FpSurface}"
+                     Foreground="{DynamicResource FpForeground}"
+                     BorderBrush="{DynamicResource FpBorder}" />
             <imaging:CrispImage Width="14" Height="14"
                                 Moniker="{x:Static catalog:KnownMonikers.Search}"
                                 HorizontalAlignment="Left"
@@ -201,7 +196,7 @@
                        IsHitTestVisible="False">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{DynamicResource {x:Static vs:VsBrushes.GrayTextKey}}" />
+                        <Setter Property="Foreground" Value="{DynamicResource FpFaint}" />
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">

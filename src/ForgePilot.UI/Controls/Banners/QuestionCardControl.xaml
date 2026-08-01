@@ -1,12 +1,11 @@
-<UserControl x:Class="ForgePilot.VSExtension.ToolWindows.Banners.QuestionCardControl"
+<UserControl x:Class="ForgePilot.UI.Controls.Banners.QuestionCardControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vs="clr-namespace:Microsoft.VisualStudio.Shell;assembly=Microsoft.VisualStudio.Shell.15.0"
-             xmlns:bvm="clr-namespace:ForgePilot.UI.ViewModels.Banners;assembly=ForgePilot.UI">
+             xmlns:bvm="clr-namespace:ForgePilot.UI.ViewModels.Banners">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/ForgePilot.VSExtension;component/ToolWindows/Banners/BannerStyles.xaml"/>
+                <ResourceDictionary Source="/ForgePilot.UI;component/Themes/BannerStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Per-option item templates. We can't keep both a radio and a
@@ -25,10 +24,10 @@
                     <StackPanel Orientation="Vertical">
                         <TextBlock Text="{Binding Label}"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource {x:Static vs:VsBrushes.ToolWindowTextKey}}"/>
+                                   Foreground="{DynamicResource FpForeground}"/>
                         <TextBlock Text="{Binding Description}"
                                    Visibility="{Binding HasDescription, Converter={StaticResource BoolToVis}}"
-                                   Foreground="{DynamicResource {x:Static vs:VsBrushes.ToolWindowTextKey}}"
+                                   Foreground="{DynamicResource FpForeground}"
                                    Opacity="0.78"
                                    FontSize="11"
                                    TextWrapping="Wrap"/>
@@ -42,10 +41,10 @@
                     <StackPanel Orientation="Vertical">
                         <TextBlock Text="{Binding Label}"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource {x:Static vs:VsBrushes.ToolWindowTextKey}}"/>
+                                   Foreground="{DynamicResource FpForeground}"/>
                         <TextBlock Text="{Binding Description}"
                                    Visibility="{Binding HasDescription, Converter={StaticResource BoolToVis}}"
-                                   Foreground="{DynamicResource {x:Static vs:VsBrushes.ToolWindowTextKey}}"
+                                   Foreground="{DynamicResource FpForeground}"
                                    Opacity="0.78"
                                    FontSize="11"
                                    TextWrapping="Wrap"/>
@@ -64,7 +63,7 @@
                              GroupName="{Binding GroupName}"
                              VerticalAlignment="Center">
                     <TextBlock Text="Other:"
-                               Foreground="{DynamicResource {x:Static vs:VsBrushes.ToolWindowTextKey}}"
+                               Foreground="{DynamicResource FpForeground}"
                                VerticalAlignment="Center"/>
                 </RadioButton>
             </DataTemplate>
@@ -74,7 +73,7 @@
                           IsChecked="{Binding IsOtherSelected, Mode=TwoWay}"
                           VerticalAlignment="Center">
                     <TextBlock Text="Other:"
-                               Foreground="{DynamicResource {x:Static vs:VsBrushes.ToolWindowTextKey}}"
+                               Foreground="{DynamicResource FpForeground}"
                                VerticalAlignment="Center"/>
                 </CheckBox>
             </DataTemplate>
@@ -88,7 +87,7 @@
                     <TextBlock Text="{Binding QuestionText}"
                                FontWeight="SemiBold"
                                FontSize="15"
-                               Foreground="{DynamicResource {x:Static vs:VsBrushes.ToolWindowTextKey}}"
+                               Foreground="{DynamicResource FpForeground}"
                                Margin="0,2,0,10"
                                TextWrapping="Wrap"/>
 
@@ -191,7 +190,7 @@
                            Margin="8,0,0,0"
                            FontSize="11"
                            FontWeight="SemiBold"
-                           Foreground="{DynamicResource {x:Static vs:VsBrushes.CommandBarTextInactiveKey}}"/>
+                           Foreground="{DynamicResource FpMuted}"/>
 
                 <TextBlock Grid.Column="3"
                            Text="{Binding HeaderLabel}"
@@ -199,7 +198,7 @@
                            Margin="12,0,0,0"
                            FontSize="12"
                            Opacity="0.85"
-                           Foreground="{DynamicResource {x:Static vs:VsBrushes.ToolWindowTextKey}}"
+                           Foreground="{DynamicResource FpForeground}"
                            TextTrimming="CharacterEllipsis"/>
             </Grid>
 
@@ -208,7 +207,7 @@
                     Height="1"
                     Margin="0,4,0,0"
                     Opacity="0.5"
-                    Background="{DynamicResource {x:Static vs:VsBrushes.ToolWindowBorderKey}}"/>
+                    Background="{DynamicResource FpBorder}"/>
 
             <!-- Row 2: current question host -->
             <ContentControl Grid.Row="2"

@@ -2,6 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:ForgePilot.UI.Controls;assembly=ForgePilot.UI"
+        xmlns:bvm="clr-namespace:ForgePilot.UI.ViewModels.Banners;assembly=ForgePilot.UI"
+        xmlns:bv="clr-namespace:ForgePilot.UI.Controls.Banners;assembly=ForgePilot.UI"
         Title="ForgePilot"
         Height="820" Width="1000"
         MinHeight="420" MinWidth="480"
@@ -12,6 +14,19 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Banner views, picked by VM type. Without these the ContentControl
+             renders ActiveBanner as its ToString() and a permission prompt
+             becomes unanswerable, which blocks the CLI. -->
+        <DataTemplate DataType="{x:Type bvm:PermissionBannerViewModel}">
+            <bv:PermissionBannerControl/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type bvm:LoginBannerViewModel}">
+            <bv:LoginBannerControl/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type bvm:QuestionCardViewModel}">
+            <bv:QuestionCardControl/>
+        </DataTemplate>
 
         <!-- Circular accent send button, the Claude Desktop affordance. It
              disables rather than disappears so the composer doesn't reflow as
