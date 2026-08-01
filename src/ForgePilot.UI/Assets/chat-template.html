@@ -133,6 +133,40 @@ html, body {
 }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* ── Tool run group ─────────────────────────────────────────────────────
+   Consecutive tool steps collapse behind one muted line ("Used 9 tools"),
+   because a long run of individual cards drowns out the actual conversation.
+   The cards are still there, one click away. */
+.tool-group {
+    max-width: 860px;
+    margin: 0;
+    padding: 0 22px 16px;
+}
+.tool-group-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--faint);
+    font-size: 13px;
+    padding: 2px 0;
+}
+.tool-group-header:hover { color: var(--muted); }
+.tool-group-chevron {
+    font-size: 9px;
+    transition: transform 0.15s ease;
+}
+.tool-group-chevron.expanded { transform: rotate(90deg); }
+.tool-group-header .running { color: var(--accent); }
+.tool-group-header .failed { color: var(--error); }
+
+.tool-group-body { display: none; margin-top: 8px; }
+.tool-group-body.visible { display: block; }
+/* Cards inside a group must not re-apply the column padding. */
+.tool-group-body .msg { max-width: none; padding: 0 0 8px; }
+.tool-group-body .msg:last-child { padding-bottom: 0; }
+
 /* ── Tool call ──────────────────────────────────────────────────────────
    A collapsed card by default: status dot, tool name, dim argument. Clicking
    the header reveals the result. This is the one place that departs from a
@@ -443,6 +477,11 @@ var userConverter = new showdown.Converter({
 var _userScrolledUp = false;
 var _container;
 
+// The tool-run group currently accepting steps, or null when the last thing
+// appended was not a tool step. Reset by any non-tool message so a group only
+// ever spans a genuinely consecutive run.
+var _currentGroup = null;
+
 var CHEVRON = '▶';
 
 // File path regex: require the extension to start lowercase, which keeps
@@ -615,6 +654,94 @@ function tryRenderDiff(text) {
     return wrap;
 }
 
+/** Opens a new tool-run group, or returns the one still accepting steps. */
+function ensureToolGroup() {
+    if (_currentGroup) return _currentGroup;
+
+    var group = document.createElement('div');
+    group.className = 'tool-group';
+
+    var header = document.createElement('div');
+    header.className = 'tool-group-header';
+
+    var chevron = document.createElement('span');
+    chevron.className = 'tool-group-chevron';
+    chevron.textContent = CHEVRON;
+
+    var label = document.createElement('span');
+    label.className = 'tool-group-label';
+
+    header.appendChild(chevron);
+    header.appendChild(label);
+
+    var body = document.createElement('div');
+    body.className = 'tool-group-body';
+
+    header.addEventListener('click', function () {
+        var show = !body.classList.contains('visible');
+        body.classList.toggle('visible', show);
+        chevron.classList.toggle('expanded', show);
+    });
+
+    group.appendChild(header);
+    group.appendChild(body);
+    _container.appendChild(group);
+    _currentGroup = group;
+    return group;
+}
+
+/**
+ * Rewrites a group's summary line from the state of the steps inside it.
+ * Called whenever a step is added or changes status, since the label depends
+ * on the whole run rather than any one step.
+ */
+function updateGroupHeader(group) {
+    if (!group) return;
+    var label = group.querySelector('.tool-group-label');
+    if (!label) return;
+
+    var steps = group.querySelectorAll('.msg-toolstep');
+    var n = steps.length;
+    if (!n) return;
+
+    var pending = 0, failed = 0, allBash = true;
+    for (var i = 0; i < n; i++) {
+        var dot = steps[i].querySelector('.tool-dot');
+        if (dot) {
+            if (dot.classList.contains('Pending')) pending++;
+            if (dot.classList.contains('Error')) failed++;
+        }
+        if (steps[i].dataset.tool !== 'Bash') allBash = false;
+    }
+
+    label.className = 'tool-group-label';
+    var text;
+
+    if (pending > 0) {
+        // Name what's actually happening now — "Running a command" reads far
+        // better mid-run than a count that keeps changing under the cursor.
+        var current = steps[n - 1].dataset.tool || '';
+        text = allBash ? 'Running a command' : (current ? 'Running ' + current : 'Working');
+        label.classList.add('running');
+    } else if (allBash) {
+        text = n === 1 ? 'Ran 1 command' : 'Ran ' + n + ' commands';
+    } else {
+        text = n === 1 ? 'Used 1 tool' : 'Used ' + n + ' tools';
+    }
+
+    if (failed > 0) {
+        text += ' · ' + failed + ' failed';
+        label.classList.add('failed');
+    }
+
+    label.textContent = text;
+}
+
+/** Finds the group a message belongs to, if any. */
+function groupOf(el) {
+    return el && el.parentNode ? el.parentNode.closest('.tool-group') : null;
+}
+
 /** Shortens a tool argument to something that fits one header line. */
 function shortArgs(toolName, raw) {
     if (!raw) return '';
@@ -655,6 +782,8 @@ function addMessage(id, type, dataJson) {
     }
     else if (type === 'ToolStep') {
         div.classList.add('msg-toolstep');
+        // Read back by updateGroupHeader to label the run.
+        div.dataset.tool = data.ToolName || '';
         var card = document.createElement('div');
         card.className = 'tool-card';
 
@@ -739,7 +868,16 @@ function addMessage(id, type, dataJson) {
         div.appendChild(tbody);
     }
 
-    _container.appendChild(div);
+    if (type === 'ToolStep') {
+        var group = ensureToolGroup();
+        group.querySelector('.tool-group-body').appendChild(div);
+        updateGroupHeader(group);
+    } else {
+        // Anything that isn't a tool step ends the run.
+        _currentGroup = null;
+        _container.appendChild(div);
+    }
+
     maybeScrollToBottom();
 }
 
@@ -771,7 +909,11 @@ function updateStatus(id, status, expanderTitle) {
     if (!el) return;
 
     var dot = el.querySelector('.tool-dot');
-    if (dot) dot.className = 'tool-dot msg-status ' + status;
+    if (dot) {
+        dot.className = 'tool-dot msg-status ' + status;
+        // The group label reflects pending/failed counts across the whole run.
+        updateGroupHeader(groupOf(el));
+    }
 
     if (expanderTitle) {
         var et = el.querySelector('.msg-expander-title');
@@ -799,11 +941,21 @@ function setBody(id, bodyContent, bodyMode) {
     }
     body.dataset.filled = '1';
 
-    // A todo list is the point of the step, not an aside — show it expanded.
+    // A todo list is the point of the step, not an aside — show it expanded,
+    // and open the enclosing run too, or it would sit expanded inside a
+    // collapsed group where nobody can see it.
     if (special && special.classList.contains('todo-list')) {
         body.classList.add('visible');
         var chev = el.querySelector('.tool-chevron');
         if (chev) chev.classList.add('expanded');
+
+        var group = groupOf(el);
+        if (group) {
+            var gBody = group.querySelector('.tool-group-body');
+            var gChev = group.querySelector('.tool-group-chevron');
+            if (gBody) gBody.classList.add('visible');
+            if (gChev) gChev.classList.add('expanded');
+        }
     }
 
     maybeScrollToBottom();
@@ -819,14 +971,22 @@ function completeMessage(id) {
     // Collapse the live stream pane; the body carries the result from here.
     var stream = el.querySelector('.tool-stream');
     if (stream) stream.classList.remove('visible');
+
+    // "Running X" becomes "Used N tools" once nothing is pending.
+    updateGroupHeader(groupOf(el));
 }
 
 function clearAll() {
     if (_container) _container.innerHTML = '';
+    _currentGroup = null;
     _userScrolledUp = false;
 }
 
 function loadMessages(jsonArray) {
+    // Restoring replays through addMessage, so grouping rebuilds itself — but
+    // only if no half-open group is carried over from a previous transcript.
+    _currentGroup = null;
+
     var messages = typeof jsonArray === 'string' ? JSON.parse(jsonArray) : jsonArray;
     for (var i = 0; i < messages.length; i++) {
         var m = messages[i];

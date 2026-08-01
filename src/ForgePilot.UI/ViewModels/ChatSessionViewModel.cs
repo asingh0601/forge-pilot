@@ -92,7 +92,13 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
                     ? (int)(DateTime.UtcNow - _busySince.Value).TotalSeconds
                     : 0;
                 ActivityGlyph = SpinnerFrames[_spinnerFrame].ToString();
-                StatusLine = $"Working… ({elapsed}s · esc to interrupt)";
+
+                // Tokens only arrive on the CLI's result event, so during the
+                // first turn there is nothing to show — omit the segment rather
+                // than display a misleading zero.
+                var tokens = _chatService?.GetSessionTokens();
+                var usage = tokens.HasValue ? $" · {FormatTokens(tokens.Value)} tokens" : "";
+                StatusLine = $"Working… ({FormatElapsed(elapsed)}{usage} · esc to interrupt)";
                 break;
 
             case SessionActivity.AwaitingUser:
@@ -106,6 +112,18 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
                 break;
         }
     }
+
+    /// <summary>"45s" under a minute, "1m 29s" beyond it.</summary>
+    private static string FormatElapsed(int seconds) =>
+        seconds < 60 ? $"{seconds}s" : $"{seconds / 60}m {seconds % 60}s";
+
+    /// <summary>"2.5k" rather than "2513" — the digits past the first two are noise.</summary>
+    private static string FormatTokens(long tokens) => tokens switch
+    {
+        >= 1_000_000 => $"{tokens / 1_000_000.0:0.#}M",
+        >= 1_000 => $"{tokens / 1_000.0:0.#}k",
+        _ => tokens.ToString()
+    };
 
     private void EnsureActivityTimer()
     {
@@ -398,13 +416,25 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
             case "usage":
             {
                 var cost = _chatService?.GetSessionCost();
-                var body = cost.HasValue
-                    ? $"**Session cost:** ${cost.Value:F4}"
-                    : "No cost reported yet — the CLI reports it once a turn completes.";
+                var tokens = _chatService?.GetSessionTokens();
+
+                string body;
+                if (!cost.HasValue && !tokens.HasValue)
+                {
+                    body = "Nothing reported yet — the CLI reports usage once a turn completes.";
+                }
+                else
+                {
+                    var parts = new List<string>();
+                    if (tokens.HasValue) parts.Add($"**Tokens:** {tokens.Value:N0}");
+                    if (cost.HasValue) parts.Add($"**Cost:** ${cost.Value:F4}");
+                    body = string.Join("  ·  ", parts);
+                }
 
                 EmitLocalMessage(
-                    $"{body}\n\n_Reported by the CLI for this session only. `/usage` in the terminal shows " +
-                    "subscription-wide limits, which the print-mode transport this window uses does not expose._");
+                    $"{body}\n\n_This session only, including cache reads and writes. `/usage` in the terminal " +
+                    "reports subscription-wide limits, which the print-mode transport this window uses does not " +
+                    "expose._");
                 return true;
             }
 

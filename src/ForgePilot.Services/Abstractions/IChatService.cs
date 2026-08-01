@@ -23,6 +23,13 @@ public interface IChatService
     decimal? GetSessionCost();
 
     /// <summary>
+    /// Total tokens the CLI reported for this session, including cache reads
+    /// and writes. Null until a turn has completed — the CLI only reports usage
+    /// on the result event, not while streaming.
+    /// </summary>
+    long? GetSessionTokens();
+
+    /// <summary>
     /// Raised when the underlying CLI returned an authentication / login-required
     /// error. The string argument is the original error text from the CLI so the
     /// host can surface it to the user. Hosts should respond by showing a login

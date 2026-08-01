@@ -43,6 +43,44 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
 
     private string? _cliSessionId;
     private decimal _cumulativeCostUsd;
+    private long _cumulativeTokens;
+
+    /// <summary>
+    /// Total tokens reported by the CLI across this session — input, output and
+    /// both cache counters. Null until the first turn completes, since the CLI
+    /// only reports usage on the result event.
+    /// </summary>
+    public long? GetSessionTokens() => _cumulativeTokens > 0 ? _cumulativeTokens : null;
+
+    /// <summary>
+    /// Pulls token counts out of a result event's <c>usage</c> object.
+    ///
+    /// Cache reads and writes are counted alongside input and output: they are
+    /// real tokens the request moved, and omitting them makes a heavily cached
+    /// session look almost free when it wasn't. Every field is optional — the
+    /// CLI's usage shape has changed before and unknown keys are ignored rather
+    /// than throwing mid-turn.
+    /// </summary>
+    private void AccumulateUsage(JsonElement evt)
+    {
+        if (!evt.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
+            return;
+
+        foreach (var field in new[]
+                 {
+                     "input_tokens",
+                     "output_tokens",
+                     "cache_creation_input_tokens",
+                     "cache_read_input_tokens"
+                 })
+        {
+            if (usage.TryGetProperty(field, out var v) && v.ValueKind == JsonValueKind.Number &&
+                v.TryGetInt64(out var n) && n > 0)
+            {
+                _cumulativeTokens += n;
+            }
+        }
+    }
     private Task? _dispatcherTask;
     private readonly object _dispatcherLock = new object();
 
@@ -437,6 +475,8 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
         {
             if (evt.TryGetProperty("cost_usd", out var cost) && cost.ValueKind == JsonValueKind.Number)
                 _cumulativeCostUsd += cost.GetDecimal();
+
+            AccumulateUsage(evt);
         }
 
         // Signal SendMessageAsync to return.
@@ -799,6 +839,7 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
     {
         _cliSessionId = null;
         _cumulativeCostUsd = 0;
+        _cumulativeTokens = 0;
         _host.Stop();
         lock (_dispatcherLock) { _dispatcherTask = null; }
         _logger.LogInformation("[ClaudeCli] Session cleared (process killed)");
