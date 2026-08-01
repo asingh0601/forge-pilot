@@ -103,12 +103,14 @@
     see assets/make-icons.ps1.
   -->
   <ItemGroup>
-    <None Include="Resources\icon.png" Condition="Exists('Resources\icon.png')">
+    <Content Include="Resources\icon.png" Condition="Exists('$(MSBuildProjectDirectory)\Resources\icon.png')">
       <IncludeInVSIX>true</IncludeInVSIX>
-    </None>
-    <None Include="Resources\preview.png" Condition="Exists('Resources\preview.png')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\preview.png" Condition="Exists('$(MSBuildProjectDirectory)\Resources\preview.png')">
       <IncludeInVSIX>true</IncludeInVSIX>
-    </None>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
