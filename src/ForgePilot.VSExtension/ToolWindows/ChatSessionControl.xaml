@@ -104,6 +104,50 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Composer footer chip: model / effort / mode. Quiet by default so the
+             composer stays about the text, with a hover fill to show it's live. -->
+        <Style x:Key="ChipButtonStyle" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource FpMuted}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Margin" Value="0,0,2,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="7"
+                                Padding="8,3"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource FpSurfaceSubtle}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource FpForeground}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Plan mode is a state, not a menu, so it reads as an accent-filled
+             pill when active rather than another muted chip. -->
+        <Style x:Key="ModeChipStyle" TargetType="Button" BasedOn="{StaticResource ChipButtonStyle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsPlanMode}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource FpAccentSubtle}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource FpAccent}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- ListBoxItem template used in the @-mention popup -->
         <Style x:Key="MentionItemStyle" TargetType="ListBoxItem">
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -330,22 +374,44 @@
                              one surface, the way the desktop app composer reads. -->
                         <Grid Grid.Row="1" Margin="6,0,6,5">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>  <!-- @ + mode -->
+                                <ColumnDefinition Width="*"/>     <!-- status -->
+                                <ColumnDefinition Width="Auto"/>  <!-- model + effort -->
+                                <ColumnDefinition Width="Auto"/>  <!-- send / stop -->
                             </Grid.ColumnDefinitions>
 
-                            <!-- @-mention attach button: opens the file/folder picker popup -->
-                            <Button Grid.Column="0"
-                                    x:Name="AtMentionButton"
-                                    Style="{StaticResource IconButtonStyle}"
-                                    Click="AtMentionButton_Click"
-                                    ToolTip="Insert file or folder reference (@)">
-                                <TextBlock Text="@"
-                                           FontSize="14"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource FpMuted}"/>
-                            </Button>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                        VerticalAlignment="Center" Margin="0,0,6,0">
+                                <Button x:Name="ModelChip"
+                                        Style="{StaticResource ChipButtonStyle}"
+                                        Click="ModelChip_Click"
+                                        Content="{Binding ModelLabel}"
+                                        ToolTip="Model for this session"/>
+                                <Button x:Name="EffortChip"
+                                        Style="{StaticResource ChipButtonStyle}"
+                                        Click="EffortChip_Click"
+                                        Content="{Binding EffortLabel}"
+                                        ToolTip="Extended thinking budget"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- @-mention attach button: opens the file/folder picker popup -->
+                                <Button x:Name="AtMentionButton"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        Click="AtMentionButton_Click"
+                                        ToolTip="Insert file or folder reference (@)">
+                                    <TextBlock Text="@"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource FpMuted}"/>
+                                </Button>
+
+                                <Button x:Name="ModeChip"
+                                        Style="{StaticResource ModeChipStyle}"
+                                        Click="ModeChip_Click"
+                                        Content="{Binding ModeLabel}"
+                                        ToolTip="Toggle plan mode — Claude proposes an approach before touching anything"/>
+                            </StackPanel>
 
                             <TextBlock Grid.Column="1"
                                        x:Name="StatusInfoText"
@@ -356,7 +422,7 @@
                                        TextTrimming="CharacterEllipsis"/>
 
                             <!-- Send / Stop: circular accent button, Claude Desktop style -->
-                            <Grid Grid.Column="2">
+                            <Grid Grid.Column="3">
                                 <Button Style="{StaticResource SendButtonStyle}"
                                         Command="{Binding SendCommand}"
                                         ToolTip="Send (Enter)">

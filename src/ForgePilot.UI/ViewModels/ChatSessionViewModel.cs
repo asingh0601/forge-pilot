@@ -48,6 +48,22 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
     private DateTime? _busySince;
     private System.Windows.Threading.DispatcherTimer? _activityTimer;
 
+    /// <summary>Model chip text — "Default" when no explicit model is pinned.</summary>
+    [ObservableProperty]
+    private string _modelLabel = "Default";
+
+    /// <summary>Effort chip text, derived from the thinking-token budget.</summary>
+    [ObservableProperty]
+    private string _effortLabel = "Auto";
+
+    /// <summary>Mode chip text: "Plan", "Act", "Auto-edit" or "Bypass".</summary>
+    [ObservableProperty]
+    private string _modeLabel = "Act";
+
+    /// <summary>True while the session is in plan mode, for the toggle's visual state.</summary>
+    [ObservableProperty]
+    private bool _isPlanMode;
+
     /// <summary>Animated glyph shown beside <see cref="StatusLine"/> while busy.</summary>
     [ObservableProperty]
     private string _activityGlyph = "✻";
@@ -111,6 +127,95 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
                 StatusLine = "";
                 break;
         }
+    }
+
+    // ── Session settings (model / effort / mode) ───────────────────────────
+
+    /// <summary>Effort presets, in the order the picker shows them.</summary>
+    public static readonly (string Label, int Tokens)[] EffortLevels =
+    {
+        ("Auto", 0),
+        ("Low", 4_000),
+        ("Medium", 10_000),
+        ("High", 32_000),
+        ("Max", 64_000),
+    };
+
+    /// <summary>
+    /// Model presets. Aliases rather than pinned ids on purpose — the CLI
+    /// resolves an alias to whatever the current model behind it is, so this
+    /// list doesn't go stale every time a new version ships.
+    /// </summary>
+    public static readonly (string Label, string Value)[] Models =
+    {
+        ("Default", ""),
+        ("Opus", "opus"),
+        ("Sonnet", "sonnet"),
+        ("Haiku", "haiku"),
+    };
+
+    /// <summary>
+    /// Pushes settings into the chat service and refreshes the chips.
+    /// Returns the error to surface, or null on success — the caller decides
+    /// how to show it, since the view models have no dialog of their own.
+    /// </summary>
+    public string? ApplySessionSettings(SessionSettings settings)
+    {
+        if (_chatService is null) return null;
+
+        try
+        {
+            _chatService.ApplySettings(settings);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Raised when a turn is in flight; the CLI process must not be
+            // killed out from under a response in progress.
+            return ex.Message;
+        }
+
+        RefreshSettingLabels();
+        return null;
+    }
+
+    /// <summary>The live CLI settings, or null when no chat service is attached.</summary>
+    public SessionSettings? GetSessionSettings() => _chatService?.GetSettings();
+
+    /// <summary>Reads the live settings back into the chip labels.</summary>
+    public void RefreshSettingLabels()
+    {
+        var s = _chatService?.GetSettings();
+        if (s is null) return;
+
+        ModelLabel = Models.FirstOrDefault(m =>
+            string.Equals(m.Value, s.Model, StringComparison.OrdinalIgnoreCase)).Label
+            // A model set by hand in Options won't match a preset; show it verbatim.
+            ?? (string.IsNullOrWhiteSpace(s.Model) ? "Default" : s.Model);
+
+        EffortLabel = EffortLevels.FirstOrDefault(e => e.Tokens == s.MaxThinkingTokens).Label
+            ?? $"{s.MaxThinkingTokens / 1000}k";
+
+        IsPlanMode = s.PermissionMode == CliPermissionMode.Plan;
+        ModeLabel = s.PermissionMode switch
+        {
+            CliPermissionMode.Plan => "Plan",
+            CliPermissionMode.AcceptEdits => "Auto-edit",
+            CliPermissionMode.BypassPermissions => "Bypass",
+            _ => "Act"
+        };
+    }
+
+    /// <summary>Flips between plan and act, leaving the other settings alone.</summary>
+    public string? TogglePlanMode()
+    {
+        var s = _chatService?.GetSettings();
+        if (s is null) return null;
+
+        var next = s.PermissionMode == CliPermissionMode.Plan
+            ? CliPermissionMode.Default
+            : CliPermissionMode.Plan;
+
+        return ApplySessionSettings(s with { PermissionMode = next });
     }
 
     /// <summary>"45s" under a minute, "1m 29s" beyond it.</summary>

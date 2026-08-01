@@ -98,6 +98,87 @@ public partial class ChatSessionControl : UserControl
     private void NewSessionButton_Click(object sender, RoutedEventArgs e)
         => _sessionListViewModel?.NewSessionCommand.Execute(null);
 
+    // ── Composer footer chips ───────────────────────────────────────────────
+    //
+    // Each change restarts the CLI child process, because model, thinking
+    // budget and permission mode are all launch-time properties of it. The
+    // conversation survives — the relaunch resumes the same CLI session — but
+    // it cannot happen mid-response, so ApplySessionSettings returns a message
+    // to show instead of throwing.
+
+    private void ModelChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ChatSessionViewModel vm) return;
+        var current = vm.ModelLabel;
+
+        ShowChipMenu(ModelChip, ChatSessionViewModel.Models.Select(m => m.Label), current, label =>
+        {
+            var chosen = ChatSessionViewModel.Models.First(m => m.Label == label);
+            var s = vm.GetSessionSettings();
+            if (s is null) return;
+            ReportIfBlocked(vm.ApplySessionSettings(s with { Model = chosen.Value }));
+        });
+    }
+
+    private void EffortChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ChatSessionViewModel vm) return;
+        var current = vm.EffortLabel;
+
+        ShowChipMenu(EffortChip, ChatSessionViewModel.EffortLevels.Select(l => l.Label), current, label =>
+        {
+            var chosen = ChatSessionViewModel.EffortLevels.First(l => l.Label == label);
+            var s = vm.GetSessionSettings();
+            if (s is null) return;
+            ReportIfBlocked(vm.ApplySessionSettings(s with { MaxThinkingTokens = chosen.Tokens }));
+        });
+    }
+
+    private void ModeChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is ChatSessionViewModel vm)
+            ReportIfBlocked(vm.TogglePlanMode());
+    }
+
+    private static void ShowChipMenu(
+        Button anchor, IEnumerable<string> options, string current, Action<string> onPick)
+    {
+        var menu = new ContextMenu
+        {
+            PlacementTarget = anchor,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Top
+        };
+
+        foreach (var option in options)
+        {
+            var captured = option;
+            var item = new MenuItem
+            {
+                Header = captured,
+                IsCheckable = true,
+                IsChecked = captured == current
+            };
+            item.Click += (_, _) =>
+            {
+                if (captured != current) onPick(captured);
+            };
+            menu.Items.Add(item);
+        }
+
+        menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Surfaces the "can't change settings mid-response" case in the status
+    /// line rather than a modal — it's a wait-a-moment condition, not an error
+    /// worth interrupting for. Cleared on the next status update.
+    /// </summary>
+    private void ReportIfBlocked(string? message)
+    {
+        if (string.IsNullOrEmpty(message)) return;
+        StatusInfoText.Text = message;
+    }
+
     /// <summary>
     /// Lists the slash commands, skills, connectors and plugins the Claude Code
     /// CLI will load for this workspace. Picking a command or skill types its
@@ -212,6 +293,10 @@ public partial class ChatSessionControl : UserControl
     public void Initialize(ChatSessionViewModel viewModel)
     {
         DataContext = viewModel;
+
+        // Seed the footer chips from whatever the session actually launched
+        // with, rather than leaving them on their declared defaults.
+        viewModel.RefreshSettingLabels();
 
         viewModel.MessageAdded += (id, type, data) =>
             _ = ChatWebView.AddMessageAsync(id, type, data);
