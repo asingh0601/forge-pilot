@@ -13,11 +13,14 @@ namespace ForgePilot.VSExtension.Options;
 [Guid("a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")]
 public class ForgePilotOptionsPage : DialogPage
 {
+    // No [DefaultValue]: the real default is resolved at runtime and the
+    // attribute only takes a compile-time constant. Declaring "claude" here
+    // would make the property grid show the wrong value as the default and
+    // reset to it.
     [Category("Claude CLI")]
     [DisplayName("Claude CLI Path")]
-    [Description("Path to the Claude Code CLI executable. Defaults to 'claude' (assumes it's on PATH).")]
-    [DefaultValue("claude")]
-    public string ClaudeCliPath { get; set; } = "claude";
+    [Description(@"Path to the Claude Code CLI executable. Defaults to the npm global shim at %AppData%\npm\claude.cmd when it exists, otherwise 'claude' from PATH.")]
+    public string ClaudeCliPath { get; set; } = ForgePilotOptions.DefaultCliPath;
 
     [Category("Claude CLI")]
     [DisplayName("CLI Permission Mode")]

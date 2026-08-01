@@ -25,10 +25,76 @@ public partial class ChatSessionControl : UserControl
     private List<MentionEntry>? _mentionCache;
     private bool _suppressTextChanged;
 
+    private SessionListViewModel? _sessionListViewModel;
+    private SessionInfo? _currentSession;
+
     public ChatSessionControl()
     {
         InitializeComponent();
     }
+
+    /// <summary>
+    /// Points the header picker at the session list. Called by the package each
+    /// time a session is loaded into the window.
+    /// </summary>
+    public void BindSessions(SessionListViewModel? sessions, SessionInfo current)
+    {
+        _sessionListViewModel = sessions;
+        _currentSession = current;
+        SessionNameText.Text = current.Name;
+
+        // The session is often renamed a moment later, once a title has been
+        // generated from the first message.
+        if (DataContext is ChatSessionViewModel vm)
+        {
+            vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(ChatSessionViewModel.SessionTitle))
+                    SessionNameText.Text = vm.SessionTitle;
+            };
+        }
+    }
+
+    private void SessionMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_sessionListViewModel is null) return;
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = SessionMenuButton,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom
+        };
+
+        // Most recent first — the ordering the picker is actually used in.
+        foreach (var session in _sessionListViewModel.Sessions.OrderByDescending(s => s.LastActivity))
+        {
+            var captured = session;
+            var item = new MenuItem
+            {
+                Header = session.Name,
+                IsCheckable = true,
+                IsChecked = _currentSession is not null && captured.Id == _currentSession.Id
+            };
+            item.Click += (_, _) =>
+            {
+                if (_currentSession is not null && captured.Id == _currentSession.Id) return;
+                _sessionListViewModel.OpenSessionCommand.Execute(captured);
+            };
+            menu.Items.Add(item);
+        }
+
+        if (menu.Items.Count > 0)
+            menu.Items.Add(new Separator());
+
+        var newItem = new MenuItem { Header = "New session" };
+        newItem.Click += (_, _) => _sessionListViewModel.NewSessionCommand.Execute(null);
+        menu.Items.Add(newItem);
+
+        menu.IsOpen = true;
+    }
+
+    private void NewSessionButton_Click(object sender, RoutedEventArgs e)
+        => _sessionListViewModel?.NewSessionCommand.Execute(null);
 
     public void Initialize(ChatSessionViewModel viewModel)
     {
@@ -91,14 +157,29 @@ public partial class ChatSessionControl : UserControl
 
     private void InputTextBox_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter &&
-            (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        // Esc interrupts a running turn.
+        if (e.Key == Key.Escape &&
+            DataContext is ChatSessionViewModel busyVm &&
+            busyVm.StopCommand.CanExecute(null))
         {
-            if (DataContext is ChatSessionViewModel vm && vm.SendCommand.CanExecute(null))
-            {
-                vm.SendCommand.Execute(null);
-                e.Handled = true;
-            }
+            busyVm.StopCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Enter) return;
+
+        // Enter sends; Shift+Enter inserts a newline. Ctrl+Enter still sends,
+        // since that was the previous binding and muscle memory is cheap to
+        // honour. The mention popup owns Enter while it's open — it is handled
+        // in PreviewKeyDown, so this never runs in that case.
+        var shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        if (shift) return;
+
+        if (DataContext is ChatSessionViewModel vm && vm.SendCommand.CanExecute(null))
+        {
+            vm.SendCommand.Execute(null);
+            e.Handled = true;
         }
     }
 

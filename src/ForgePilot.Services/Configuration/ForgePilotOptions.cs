@@ -1,13 +1,44 @@
+using System.IO;
+
 namespace ForgePilot.Services.Configuration;
 
 public class ForgePilotOptions
 {
+    /// <summary>
+    /// Where <c>npm install -g @anthropic-ai/claude-code</c> puts the shim on
+    /// Windows. Preferred over a bare "claude" because Visual Studio does not
+    /// always inherit the PATH a terminal has — the npm global directory is a
+    /// common casualty, and the failure looks like "Failed to start Claude CLI"
+    /// even though the CLI is installed and works in a shell.
+    /// </summary>
+    public static string DefaultCliPath
+    {
+        get
+        {
+            try
+            {
+                var npmShim = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "npm", "claude.cmd");
+
+                // Fall back to PATH resolution when npm installed elsewhere
+                // (nvm, a custom prefix, or a non-npm install method).
+                return File.Exists(npmShim) ? npmShim : "claude";
+            }
+            catch
+            {
+                return "claude";
+            }
+        }
+    }
+
     public string WorkingDirectory { get; set; } = Environment.CurrentDirectory;
 
     /// <summary>
-    /// Path to the Claude CLI executable. Defaults to "claude" (assumes it's on PATH).
+    /// Path to the Claude CLI executable. Defaults to the npm global shim at
+    /// <c>%AppData%\npm\claude.cmd</c> when present, otherwise "claude" on PATH.
     /// </summary>
-    public string ClaudeCliPath { get; set; } = "claude";
+    public string ClaudeCliPath { get; set; } = DefaultCliPath;
 
     /// <summary>
     /// Permission mode for the Claude CLI. Controls how tool permissions are handled.

@@ -27,7 +27,18 @@ namespace ForgePilot.VSExtension;
 [ProvideAutoLoad(UIContextGuids80.SolutionExists, PackageAutoLoadFlags.BackgroundLoad)]
 [ProvideOptionPage(typeof(ForgePilotOptionsPage), "ForgePilot", "General", 0, 0, true)]
 [ProvideToolWindow(typeof(SessionListToolWindow), Style = VsDockStyle.Tabbed, Window = EnvDTE.Constants.vsWindowKindSolutionExplorer)]
-[ProvideToolWindow(typeof(ChatSessionToolWindow), Style = VsDockStyle.MDI, MultiInstances = true, Transient = true)]
+// Chat docks into the right-hand well alongside Solution Explorer, the way
+// Copilot Chat does, instead of opening as an MDI document tab in the editor
+// area. Note these placement hints only apply the first time a window is
+// created on a given VS profile — after that the shell restores the user's own
+// layout, so an existing install keeps whatever position it already had.
+// Single instance: sessions are switched inside this one window via the header
+// picker, so MultiInstances would just let stray duplicates accumulate.
+[ProvideToolWindow(typeof(ChatSessionToolWindow),
+    Style = VsDockStyle.Tabbed,
+    Window = EnvDTE.Constants.vsWindowKindSolutionExplorer,
+    Orientation = ToolWindowOrientation.Right,
+    Transient = true)]
 [Guid("c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f")]
 public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 {
@@ -39,10 +50,15 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
     private SessionListViewModel? _sessionListViewModel;
     private ISessionStore? _sessionStore;
     private string? _solutionDirectory;
-    private readonly Dictionary<string, int> _sessionWindowMap = new();
     private static readonly SemaphoreSlim _openSessionGate = new(1, 1);
-    private int _nextWindowId;
     private uint _solutionEventsCookie;
+
+    // Single chat window. Switching sessions swaps the view model inside this
+    // one window rather than opening another, so there is exactly one place to
+    // chat and the session picker in its header decides what's loaded.
+    private const int ChatWindowId = 0;
+    private string? _activeSessionId;
+    private ChatSessionViewModel? _activeViewModel;
 
     public static bool IsLoaded => _instance is not null;
 
@@ -220,21 +236,34 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
         }
     }
 
+    /// <summary>
+    /// Opens the single chat window, resuming the most recently used session.
+    /// Only creates a session when there are none — otherwise every reload
+    /// would leave behind another empty one.
+    /// </summary>
     public static async Task ShowChatSessionWindowAsync()
     {
         if (_instance is null) return;
 
         await _instance.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-        await ShowSessionListWindowAsync();
-
-        // Only create a new empty session when there are no existing sessions,
-        // to avoid accumulating empty sessions on every reload/startup.
         var vm = _instance._sessionListViewModel;
-        if (vm is not null && vm.Sessions.Count == 0)
+        if (vm is null) return;
+
+        if (vm.Sessions.Count == 0)
         {
+            // NewSessionCommand raises SessionOpenRequested, which loads it.
             vm.NewSessionCommand.Execute(null);
+            return;
         }
+
+        // Resume where the user left off. LastActivity is maintained by the
+        // view model on every completed exchange.
+        var mostRecent = vm.Sessions
+            .OrderByDescending(s => s.LastActivity)
+            .First();
+
+        await OpenOrActivateSessionAsync(mostRecent);
     }
 
     private static async Task OpenOrActivateSessionAsync(SessionInfo session)
@@ -243,14 +272,13 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
         await _instance.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-        // Fast path: if the session already has a window, just focus it.
-        // No gate required — this is cheap and non-destructive.
-        if (_instance._sessionWindowMap.TryGetValue(session.Id, out int existingWindowId))
+        // Already showing this session — just focus the window.
+        if (_instance._activeSessionId == session.Id)
         {
             try
             {
                 var existing = await _instance.ShowToolWindowAsync(
-                    typeof(ChatSessionToolWindow), existingWindowId, true, _instance.DisposalToken);
+                    typeof(ChatSessionToolWindow), ChatWindowId, true, _instance.DisposalToken);
 
                 if (existing?.Frame is IVsWindowFrame existingFrame)
                 {
@@ -264,24 +292,41 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
             return;
         }
 
-        // Slow path: create a new tool window + WebView2 + restore messages.
-        // Serialize with a gate so we never create multiple windows concurrently
-        // (concurrent WebView2 init deadlocks the UI thread).
-        // Use WaitAsync(0) to drop rapid clicks rather than queue them up.
+        // Loading a session builds a WebView2 and replays the transcript.
+        // Serialize with a gate — concurrent WebView2 init deadlocks the UI
+        // thread. WaitAsync(0) drops rapid clicks rather than queueing them.
         if (!await _openSessionGate.WaitAsync(0))
             return;
 
         try
         {
-            var windowId = _instance._nextWindowId++;
-            _instance._sessionWindowMap[session.Id] = windowId;
+            // Tear down whatever session was loaded: disposing the view model
+            // kills its CLI process and pipe server. Without this, switching
+            // sessions would leak a `claude` process per switch.
+            if (_instance._activeViewModel is not null)
+            {
+                var previousId = _instance._activeSessionId;
+                if (previousId is not null &&
+                    _instance._sessionListViewModel?.Sessions.FirstOrDefault(s => s.Id == previousId) is { } previous)
+                {
+                    previous.IsActive = false;
+                }
+
+                try { _instance._activeViewModel.Dispose(); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"ForgePilot: Failed to dispose previous session: {ex}"); }
+
+                _instance._activeViewModel = null;
+                _instance._activeSessionId = null;
+            }
+
+            _instance._activeSessionId = session.Id;
 
             var window = await _instance.ShowToolWindowAsync(
-                typeof(ChatSessionToolWindow), windowId, true, _instance.DisposalToken);
+                typeof(ChatSessionToolWindow), ChatWindowId, true, _instance.DisposalToken);
 
             if (window is not null)
             {
-                window.Caption = session.Name;
+                window.Caption = ChatSessionToolWindow.BaseCaption;
 
                 if (window is ChatSessionToolWindow chatWindow)
                 {
@@ -325,10 +370,15 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
                     // Link the view model to its session entry so cost updates flow back to the list
                     viewModel.SessionInfo = session;
+                    _instance._activeViewModel = viewModel;
 
-                    // Sync generated title back to session list (plain title)
-                    // and window caption (animated DisplayTitle with activity
-                    // indicator prefix).
+                    // Let the header's session picker show and switch sessions.
+                    chatWindow.ChatControl.BindSessions(_instance._sessionListViewModel, session);
+
+                    // The caption stays "Forge Pilot" — with one window, the
+                    // session name belongs in the header picker, not the tab,
+                    // where it would make the tool window hard to find. Only the
+                    // busy indicator is worth surfacing on the tab.
                     viewModel.PropertyChanged += (_, e) =>
                     {
                         ThreadHelper.ThrowIfNotOnUIThread();
@@ -339,19 +389,21 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
                         }
                         else if (e.PropertyName == nameof(ChatSessionViewModel.DisplayTitle))
                         {
-                            if (window.Frame is IVsWindowFrame f)
-                            {
-                                window.Caption = viewModel.DisplayTitle;
-                            }
+                            window.Caption = viewModel.IsBusy
+                                ? viewModel.DisplayTitle.Substring(0, 2) + ChatSessionToolWindow.BaseCaption
+                                : ChatSessionToolWindow.BaseCaption;
                         }
                     };
 
-                    // Clean up when the user closes the window (e.g. via X button):
-                    // dispose the view model (kills CLI process + pipe server) and
-                    // remove from the session map so re-opening creates a fresh one.
+                    // Closing the window ends the session: dispose the view model
+                    // so the CLI process and pipe server go with it.
                     chatWindow.Closed += () =>
                     {
-                        _instance?._sessionWindowMap.Remove(session.Id);
+                        if (_instance is not null && _instance._activeSessionId == session.Id)
+                        {
+                            _instance._activeSessionId = null;
+                            _instance._activeViewModel = null;
+                        }
                         session.IsActive = false;
                         viewModel.Dispose();
                     };
@@ -379,16 +431,19 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
         await _instance.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-        if (_instance._sessionWindowMap.TryGetValue(session.Id, out int windowId))
+        // Only the loaded session owns the window. Deleting any other session
+        // is purely a list operation and must not close what's on screen.
+        if (_instance._activeSessionId != session.Id) return;
+
+        var window = _instance.FindToolWindow(typeof(ChatSessionToolWindow), ChatWindowId, false);
+        if (window?.Frame is IVsWindowFrame frame)
         {
-            var window = _instance.FindToolWindow(typeof(ChatSessionToolWindow), windowId, false);
-            if (window?.Frame is IVsWindowFrame frame)
-            {
-                frame.CloseFrame((uint)__FRAMECLOSE.FRAMECLOSE_NoSave);
-            }
-            _instance._sessionWindowMap.Remove(session.Id);
-            session.IsActive = false;
+            frame.CloseFrame((uint)__FRAMECLOSE.FRAMECLOSE_NoSave);
         }
+
+        _instance._activeSessionId = null;
+        _instance._activeViewModel = null;
+        session.IsActive = false;
     }
 
     /// <summary>
@@ -402,30 +457,25 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
         await JoinableTaskFactory.SwitchToMainThreadAsync();
 
-        // Close idle chat windows, keep busy ones
-        var sessionsToClose = new List<string>();
-        foreach (var kvp in _sessionWindowMap)
+        // Close the chat window unless it's mid-turn. Sessions are scoped to a
+        // workspace, so the loaded one no longer belongs here — but yanking it
+        // away while the CLI is still answering would lose the response.
+        if (_activeSessionId is not null)
         {
-            var window = FindToolWindow(typeof(ChatSessionToolWindow), kvp.Value, false);
-            if (window is ChatSessionToolWindow chatWindow
-                && chatWindow.ChatControl.DataContext is ChatSessionViewModel vm
-                && vm.IsBusy)
-            {
-                // Session is busy (waiting for AI response) — keep it open
-                continue;
-            }
+            var window = FindToolWindow(typeof(ChatSessionToolWindow), ChatWindowId, false);
+            var isBusy = window is ChatSessionToolWindow chatWindow
+                         && chatWindow.ChatControl.DataContext is ChatSessionViewModel vm
+                         && vm.IsBusy;
 
-            // Idle session — close the window
-            if (window?.Frame is IVsWindowFrame frame)
+            if (!isBusy)
             {
-                frame.CloseFrame((uint)__FRAMECLOSE.FRAMECLOSE_NoSave);
+                if (window?.Frame is IVsWindowFrame frame)
+                {
+                    frame.CloseFrame((uint)__FRAMECLOSE.FRAMECLOSE_NoSave);
+                }
+                _activeSessionId = null;
+                _activeViewModel = null;
             }
-            sessionsToClose.Add(kvp.Key);
-        }
-
-        foreach (var id in sessionsToClose)
-        {
-            _sessionWindowMap.Remove(id);
         }
 
         // Switch to the new workspace

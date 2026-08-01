@@ -140,6 +140,59 @@
                Background="{DynamicResource FpBackground}"
                TextOptions.TextFormattingMode="Ideal">
 
+        <!-- Header: session picker + new session. Replaces the separate session
+             list tool window as the primary way to move between sessions. -->
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource FpBackground}"
+                BorderBrush="{DynamicResource FpBorder}"
+                BorderThickness="0,0,0,1"
+                Padding="10,7">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="SessionMenuButton"
+                        Grid.Column="0"
+                        HorizontalAlignment="Left"
+                        Style="{StaticResource IconButtonStyle}"
+                        Click="SessionMenuButton_Click"
+                        ToolTip="Switch session">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="✻"
+                                   FontSize="12"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource FpAccent}"/>
+                        <TextBlock x:Name="SessionNameText"
+                                   Text="New Session"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   MaxWidth="260"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource FpForeground}"/>
+                        <TextBlock Text="⌄"
+                                   FontSize="12"
+                                   Margin="7,-3,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource FpMuted}"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="1"
+                        Style="{StaticResource IconButtonStyle}"
+                        Click="NewSessionButton_Click"
+                        ToolTip="New session">
+                    <TextBlock Text="+"
+                               FontSize="17"
+                               Margin="0,-3,0,0"
+                               Foreground="{DynamicResource FpMuted}"/>
+                </Button>
+            </Grid>
+        </Border>
+
         <!-- Input Area -->
         <Border DockPanel.Dock="Bottom"
                 Background="{DynamicResource FpBackground}"
@@ -296,7 +349,7 @@
                             <Grid Grid.Column="2">
                                 <Button Style="{StaticResource SendButtonStyle}"
                                         Command="{Binding SendCommand}"
-                                        ToolTip="Send (Ctrl+Enter)">
+                                        ToolTip="Send (Enter)">
                                     <TextBlock Text="↑" FontSize="15" FontWeight="SemiBold"
                                                Foreground="{DynamicResource FpAccentForeground}"/>
                                 </Button>
@@ -316,7 +369,7 @@
                 <Grid Grid.Row="2" Margin="14,6,14,0">
                     <TextBlock FontSize="11.5"
                                Foreground="{DynamicResource FpFaint}"
-                               Text="Ctrl+Enter to send · @ for files">
+                               Text="Enter to send · Shift+Enter for a new line · @ for files">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Visibility" Value="Visible"/>
