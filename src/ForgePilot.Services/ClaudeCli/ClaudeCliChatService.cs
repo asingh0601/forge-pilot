@@ -15,6 +15,7 @@ using Microsoft.Extensions.Options;
 using ForgePilot.Services.Abstractions;
 using ForgePilot.Services.ClaudeCli.Permissions;
 using ForgePilot.Services.Configuration;
+using ForgePilot.Services.Models;
 
 namespace ForgePilot.Services.ClaudeCli;
 
@@ -834,6 +835,42 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
     }
 
     public decimal? GetSessionCost() => _cumulativeCostUsd > 0 ? _cumulativeCostUsd : null;
+
+    public SessionSettings GetSettings() =>
+        new(_options.Model, _options.MaxThinkingTokens, _options.CliPermissionMode);
+
+    public void ApplySettings(SessionSettings settings)
+    {
+        lock (_activeTurnLock)
+        {
+            // Killing the process mid-turn would drop the response on the floor
+            // with nothing to show for it. Refuse instead: the caller can wait
+            // or Stop first, and either is better than a silent loss.
+            if (_activeTurn is not null)
+                throw new InvalidOperationException("Cannot change settings while a response is in progress.");
+        }
+
+        var current = GetSettings();
+        if (current == settings)
+            return;
+
+        _options.Model = settings.Model ?? "";
+        _options.MaxThinkingTokens = settings.MaxThinkingTokens;
+        _options.CliPermissionMode = settings.PermissionMode;
+
+        _logger.LogInformation(
+            "[ClaudeCli] Settings changed (model={Model}, thinking={Thinking}, mode={Mode}); restarting CLI",
+            string.IsNullOrEmpty(settings.Model) ? "<default>" : settings.Model,
+            settings.MaxThinkingTokens,
+            settings.PermissionMode);
+
+        // Stop only. The next SendMessageAsync calls EnsureStartedAsync, which
+        // relaunches with the new arguments — and because _cliSessionId is left
+        // intact, that relaunch passes --resume and the model keeps the whole
+        // conversation. Restarting eagerly here would spawn a process that then
+        // sits idle until the user actually says something.
+        _host.Stop();
+    }
 
     public void ClearHistory()
     {

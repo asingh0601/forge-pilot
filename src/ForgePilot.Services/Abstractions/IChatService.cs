@@ -1,7 +1,25 @@
+using ForgePilot.Services.Models;
+
 namespace ForgePilot.Services.Abstractions;
 
 public interface IChatService
 {
+    /// <summary>The CLI settings this session is currently running under.</summary>
+    SessionSettings GetSettings();
+
+    /// <summary>
+    /// Applies new CLI settings to this session.
+    ///
+    /// Model, thinking budget and permission mode are all launch-time
+    /// properties of the CLI child process, so this stops it; the next message
+    /// starts it again with the new arguments. Conversation continuity is
+    /// preserved by the CLI itself — the relaunch passes <c>--resume</c> with
+    /// the same session id, so the model still has the full history.
+    ///
+    /// Throws <see cref="InvalidOperationException"/> if a turn is in flight:
+    /// killing the process mid-response would discard it silently.
+    /// </summary>
+    void ApplySettings(SessionSettings settings);
     IAsyncEnumerable<string> SendMessageAsync(string userMessage, CancellationToken cancellationToken = default);
     Task<string> GenerateTitleAsync(string userMessage, CancellationToken cancellationToken = default);
     void ClearHistory();
