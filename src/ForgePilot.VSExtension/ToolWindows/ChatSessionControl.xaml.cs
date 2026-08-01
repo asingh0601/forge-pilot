@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
 using ForgePilot.Services.Models;
 using ForgePilot.Services.Services;
+using Microsoft.VisualStudio.Imaging;
 using ForgePilot.UI.Controls;
 using ForgePilot.UI.Themes;
 using ForgePilot.UI.ViewModels;
@@ -21,10 +22,18 @@ public partial class ChatSessionControl : UserControl
     private double _resizeStartScreenY;
     private double _resizeStartHeight;
 
-    // -1 when no mention is active. Otherwise, the caret position right after
-    // the triggering '@' — text from this index up to the caret is the filter.
+    // -1 when no completion is active. Otherwise, the caret position right
+    // after the trigger character — text from this index up to the caret is
+    // the filter.
     private int _mentionStart = -1;
+
+    // Which trigger opened the popup: '@' for files, '/' for commands. Both
+    // share the popup, key handling and commit path; only the source list and
+    // the trigger test differ.
+    private char _triggerChar = '@';
+
     private List<MentionEntry>? _mentionCache;
+    private List<MentionEntry>? _commandCache;
     private bool _suppressTextChanged;
 
     private SessionListViewModel? _sessionListViewModel;
@@ -447,22 +456,35 @@ public partial class ChatSessionControl : UserControl
 
         if (_mentionStart < 0)
         {
-            // Look for a freshly typed '@' immediately before the caret that
-            // qualifies as a trigger (start of text or preceded by whitespace).
-            if (caret > 0 && caret <= text.Length && text[caret - 1] == '@'
-                && (caret == 1 || char.IsWhiteSpace(text[caret - 2])))
+            if (caret > 0 && caret <= text.Length)
             {
-                _mentionStart = caret;
-                ShowMentionPopup("");
+                var typed = text[caret - 1];
+
+                // '@' triggers at the start of the message or after whitespace.
+                if (typed == '@' && (caret == 1 || char.IsWhiteSpace(text[caret - 2])))
+                {
+                    _triggerChar = '@';
+                    _mentionStart = caret;
+                    ShowMentionPopup("");
+                }
+                // '/' triggers only as the very first character. Anywhere else
+                // it is almost always a path separator or a division, and
+                // popping a command list over those would be noise.
+                else if (typed == '/' && caret == 1)
+                {
+                    _triggerChar = '/';
+                    _mentionStart = caret;
+                    ShowMentionPopup("");
+                }
             }
             return;
         }
 
-        // Mention is active — re-validate and refilter.
+        // A completion is active — re-validate and refilter.
         if (caret < _mentionStart
             || _mentionStart > text.Length
             || _mentionStart == 0
-            || text[_mentionStart - 1] != '@')
+            || text[_mentionStart - 1] != _triggerChar)
         {
             CloseMentionPopup();
             return;
@@ -626,14 +648,18 @@ public partial class ChatSessionControl : UserControl
         var atIndex = _mentionStart - 1;
         var endIndex = Math.Min(Math.Max(caret, _mentionStart), text.Length);
 
-        var path = entry.RelativePath;
-        if (path.IndexOf(' ') >= 0) path = "\"" + path + "\"";
+        var insert = entry.InsertText;
+
+        // Quote paths containing spaces so the CLI sees one argument. Commands
+        // already carry their own trailing space and must not be quoted.
+        if (_triggerChar == '@' && insert.IndexOf(' ') >= 0)
+            insert = "\"" + insert + "\"";
 
         _suppressTextChanged = true;
         try
         {
-            InputTextBox.Text = text.Remove(atIndex, endIndex - atIndex).Insert(atIndex, path);
-            InputTextBox.CaretIndex = atIndex + path.Length;
+            InputTextBox.Text = text.Remove(atIndex, endIndex - atIndex).Insert(atIndex, insert);
+            InputTextBox.CaretIndex = atIndex + insert.Length;
         }
         finally
         {
@@ -645,9 +671,76 @@ public partial class ChatSessionControl : UserControl
 
     private void ShowMentionPopup(string filter)
     {
-        EnsureMentionCache();
+        if (_triggerChar == '/')
+        {
+            // Discovery touches the filesystem, so it runs once per popup and
+            // is cached. Kick it off and filter when it lands — the popup opens
+            // immediately either way rather than stalling on disk IO.
+            if (_commandCache is null)
+            {
+                _ = LoadCommandCacheAsync(filter);
+                return;
+            }
+        }
+        else
+        {
+            EnsureMentionCache();
+        }
+
         ApplyMentionFilter(filter);
     }
+
+    private async Task LoadCommandCacheAsync(string filter)
+    {
+        var entries = new List<MentionEntry>();
+        try
+        {
+            var service = ForgePilotPackage.AssetService;
+            if (service is not null)
+            {
+                var assets = await service.DiscoverAsync();
+                foreach (var asset in assets
+                             .Where(a => a.Invocation is not null && a.IsEnabled)
+                             .OrderBy(a => a.Kind)
+                             .ThenBy(a => a.Name))
+                {
+                    entries.Add(new MentionEntry(
+                        asset.Invocation!,
+                        asset.Invocation! + " ",
+                        asset.Description,
+                        asset.Kind == ClaudeAssetKind.Skill
+                            ? KnownMonikers.IntellisenseKeyword
+                            : KnownMonikers.Action));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // A malformed .claude config must not break typing.
+            System.Diagnostics.Debug.WriteLine($"ForgePilot: command discovery failed: {ex}");
+        }
+
+        // Add the commands the extension answers itself — they are real and
+        // usable, and would be invisible if only disk-backed ones were listed.
+        foreach (var (name, description) in LocalCommands)
+            entries.Add(new MentionEntry("/" + name, "/" + name, description, KnownMonikers.Action));
+
+        _commandCache = entries;
+
+        // The user kept typing while discovery ran; only apply if the popup is
+        // still open on the same trigger.
+        if (_mentionStart >= 0 && _triggerChar == '/')
+            ApplyMentionFilter(filter);
+    }
+
+    /// <summary>Commands handled in ChatSessionViewModel rather than by the CLI.</summary>
+    private static readonly (string Name, string Description)[] LocalCommands =
+    {
+        ("clear", "Clear this conversation"),
+        ("cost", "Show tokens and cost for this session"),
+        ("usage", "Show tokens and cost for this session"),
+        ("help", "What works here, and what doesn't"),
+    };
 
     private void CloseMentionPopup()
     {
@@ -658,13 +751,14 @@ public partial class ChatSessionControl : UserControl
 
     private void ApplyMentionFilter(string filter)
     {
-        if (_mentionCache == null)
+        var source = _triggerChar == '/' ? _commandCache : _mentionCache;
+        if (source == null)
         {
             MentionList.ItemsSource = Array.Empty<MentionEntry>();
             return;
         }
 
-        IEnumerable<MentionEntry> q = _mentionCache;
+        IEnumerable<MentionEntry> q = source;
         if (!string.IsNullOrEmpty(filter))
         {
             q = q.Where(e =>

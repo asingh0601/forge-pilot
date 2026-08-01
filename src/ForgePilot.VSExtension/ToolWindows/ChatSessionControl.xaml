@@ -339,12 +339,23 @@
                                                                         VerticalAlignment="Center"
                                                                         Margin="0,0,6,0"
                                                                         Moniker="{Binding Moniker}"/>
-                                                    <TextBlock Grid.Column="1"
-                                                               VerticalAlignment="Center"
-                                                               Text="{Binding RelativePath}"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               FontSize="12"
-                                                               Foreground="{DynamicResource FpForeground}"/>
+                                                    <StackPanel Grid.Column="1"
+                                                                Orientation="Horizontal"
+                                                                VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding RelativePath}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   FontSize="12"
+                                                                   Foreground="{DynamicResource FpForeground}"/>
+                                                        <!-- Command descriptions; empty for file mentions,
+                                                             where the path is the whole story. -->
+                                                        <TextBlock Text="{Binding Description}"
+                                                                   Visibility="{Binding HasDescription, Converter={StaticResource BoolToVis}}"
+                                                                   Margin="8,0,0,0"
+                                                                   MaxWidth="320"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   FontSize="11.5"
+                                                                   Foreground="{DynamicResource FpFaint}"/>
+                                                    </StackPanel>
                                                 </Grid>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
