@@ -38,22 +38,15 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _sessionTitle = "New Session";
 
-    // Realtime activity indicator: a braille spinner prefix while the AI is
-    // working, a steady "? " prefix while awaiting user input (permission /
-    // question banner), and no prefix while idle. Host bindings (e.g. the VS
-    // tool window caption) should use DisplayTitle; SessionTitle stays plain
-    // for the session list entry so the sidebar doesn't flicker.
-    // Claude's four-pointed star, cycled through decreasing weights. One timer
-    // drives both the window-caption prefix and the composer status line.
+    // Claude's four-pointed star, cycled through decreasing weights. This drives
+    // the composer status line only — never a window caption. An animated title
+    // flickers in the dock on every frame and makes the window harder to find,
+    // so the tab stays fixed at "Forge Pilot".
     private static readonly string SpinnerFrames = "✻✽✢·✢✽";
-    private const string AwaitingPrefix = "? ";
     private int _pendingUserPrompts;
     private int _spinnerFrame;
     private DateTime? _busySince;
     private System.Windows.Threading.DispatcherTimer? _activityTimer;
-
-    [ObservableProperty]
-    private string _displayTitle = "New Session";
 
     /// <summary>Animated glyph shown beside <see cref="StatusLine"/> while busy.</summary>
     [ObservableProperty]
@@ -74,8 +67,6 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
 
     partial void OnIsBusyChanged(bool value) => UpdateActivityIndicator();
 
-    partial void OnSessionTitleChanged(string value) => UpdateDisplayTitle();
-
     private void UpdateActivityIndicator()
     {
         if (Activity == SessionActivity.Busy)
@@ -89,7 +80,6 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
             _activityTimer?.Stop();
             _busySince = null;
         }
-        UpdateDisplayTitle();
         UpdateStatusLine();
     }
 
@@ -130,20 +120,8 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
         _activityTimer.Tick += (_, _) =>
         {
             _spinnerFrame = (_spinnerFrame + 1) % SpinnerFrames.Length;
-            UpdateDisplayTitle();
             UpdateStatusLine();
         };
-    }
-
-    private void UpdateDisplayTitle()
-    {
-        var prefix = Activity switch
-        {
-            SessionActivity.Busy => SpinnerFrames[_spinnerFrame] + " ",
-            SessionActivity.AwaitingUser => AwaitingPrefix,
-            _ => ""
-        };
-        DisplayTitle = prefix + SessionTitle;
     }
 
     public string WorkingDirectory { get; }

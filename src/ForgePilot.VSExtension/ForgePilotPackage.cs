@@ -389,10 +389,12 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
                     // Let the header's session picker show and switch sessions.
                     chatWindow.ChatControl.BindSessions(_instance._sessionListViewModel, session);
 
-                    // The caption stays "Forge Pilot" — with one window, the
-                    // session name belongs in the header picker, not the tab,
-                    // where it would make the tool window hard to find. Only the
-                    // busy indicator is worth surfacing on the tab.
+                    // The caption is fixed at "Forge Pilot" and never animated.
+                    // A tab title that changes on every spinner frame flickers
+                    // in the dock and makes the window harder to find; activity
+                    // belongs in the composer status line, which already shows
+                    // it. Only the session name is tracked here, and that goes
+                    // to the header picker rather than the tab.
                     viewModel.PropertyChanged += (_, e) =>
                     {
                         ThreadHelper.ThrowIfNotOnUIThread();
@@ -400,12 +402,6 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
                         if (e.PropertyName == nameof(ChatSessionViewModel.SessionTitle))
                         {
                             session.Name = viewModel.SessionTitle;
-                        }
-                        else if (e.PropertyName == nameof(ChatSessionViewModel.DisplayTitle))
-                        {
-                            window.Caption = viewModel.IsBusy
-                                ? viewModel.DisplayTitle.Substring(0, 2) + ChatSessionToolWindow.BaseCaption
-                                : ChatSessionToolWindow.BaseCaption;
                         }
                     };
 
