@@ -423,6 +423,21 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
                 if (window.Frame is IVsWindowFrame frame)
                 {
+                    // Belt and braces alongside the ProvideToolWindow hints: if
+                    // a previously saved layout put this window in the document
+                    // well, force it back to a dock. Without it the panel opens
+                    // as an editor tab, which is not where a chat sidebar
+                    // belongs. Best effort — a failure here must not stop the
+                    // session from opening.
+                    try
+                    {
+                        frame.SetProperty((int)__VSFPROPID.VSFPROPID_FrameMode, VSFRAMEMODE.VSFM_Dock);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"ForgePilot: could not force dock mode: {ex.Message}");
+                    }
+
                     frame.Show();
                 }
             }

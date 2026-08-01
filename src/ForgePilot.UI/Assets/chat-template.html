@@ -79,13 +79,16 @@ html, body {
     padding: 20px 0 28px;
 }
 
-/* A single content column, centred, so long lines stay readable in a wide
-   docked tool window instead of running edge to edge. */
+/* Left-anchored content column. Capped for line-length readability, but NOT
+   centred: a centred column in a wide docked panel leaves the conversation
+   floating in the middle of an empty pane with the eye starting nowhere near
+   the left edge. Anchoring left keeps the text where a terminal or an editor
+   puts it, and the cap still stops long lines running edge to edge. */
 .msg {
     position: relative;
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 0 20px 20px;
+    max-width: 860px;
+    margin: 0;
+    padding: 0 22px 16px;
 }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }

@@ -4,7 +4,13 @@ using Microsoft.VisualStudio.Shell;
 
 namespace ForgePilot.VSExtension.ToolWindows;
 
-[Guid("b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e")]
+// New GUID on purpose. VS persists a tool window's dock placement against its
+// GUID, and a remembered layout beats the placement hints in ProvideToolWindow.
+// The inherited GUID already had "MDI document tab" saved against it from the
+// upstream registration, so the window kept opening in the editor well no
+// matter what the attributes asked for. A fresh GUID has no saved layout, so
+// the right-dock hint actually applies.
+[Guid("5e9a2f14-7c63-4bd8-a1e7-0c9d4f6b83a2")]
 public class ChatSessionToolWindow : ToolWindowPane
 {
     /// <summary>

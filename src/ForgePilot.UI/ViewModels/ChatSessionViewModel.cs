@@ -392,11 +392,92 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
 
     private bool CanSend() => !IsBusy && !string.IsNullOrWhiteSpace(InputText);
 
+    /// <summary>
+    /// Handles the slash commands that the CLI only implements in its
+    /// interactive REPL.
+    ///
+    /// The chat runs the CLI with <c>-p --input-format stream-json</c>, where
+    /// there is no REPL to parse them: <c>/usage</c>, <c>/cost</c> and friends
+    /// are passed through as ordinary text and the model just sees a message
+    /// starting with a slash. Custom project commands
+    /// (<c>.claude/commands/*.md</c>) <em>are</em> expanded by the CLI, so they
+    /// must still be forwarded — only this fixed set is intercepted.
+    /// </summary>
+    /// <returns>True when the command was handled locally and must not be sent.</returns>
+    private bool TryHandleLocalCommand(string message)
+    {
+        if (!message.StartsWith("/", StringComparison.Ordinal)) return false;
+
+        var name = message.TrimStart('/').Split(' ')[0].ToLowerInvariant();
+
+        switch (name)
+        {
+            case "clear":
+                ClearCommand.Execute(null);
+                return true;
+
+            case "cost":
+            case "usage":
+            {
+                var cost = _chatService?.GetSessionCost();
+                var body = cost.HasValue
+                    ? $"**Session cost:** ${cost.Value:F4}"
+                    : "No cost reported yet — the CLI reports it once a turn completes.";
+
+                EmitLocalMessage(
+                    $"{body}\n\n_Reported by the CLI for this session only. `/usage` in the terminal shows " +
+                    "subscription-wide limits, which the print-mode transport this window uses does not expose._");
+                return true;
+            }
+
+            case "help":
+                EmitLocalMessage(
+                    "**Handled here:** `/clear`, `/cost`, `/usage`, `/help`\n\n" +
+                    "Project and personal commands from `.claude/commands` are passed to the CLI and work " +
+                    "normally — the ⚡ menu lists the ones available in this workspace.\n\n" +
+                    "Other built-in commands (`/login`, `/model`, `/doctor`, …) belong to the CLI's " +
+                    "interactive terminal and have no effect here; run them in a shell with `claude`.");
+                return true;
+
+            default:
+                // A custom command, or one this build doesn't know — let the CLI decide.
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Renders an assistant-styled message produced by the extension itself,
+    /// without involving the CLI. Not persisted: it is a UI response to a UI
+    /// command, and replaying it on restore would misrepresent the transcript.
+    /// </summary>
+    private void EmitLocalMessage(string markdown)
+    {
+        var id = $"local-{++_userMsgCounter}";
+        Items.Add(new ChatItemViewModel
+        {
+            Type = ChatItemType.Assistant,
+            Content = markdown,
+            IsStreaming = false
+        });
+        MessageAdded?.Invoke(id, ChatItemType.Assistant, new ChatMessageData
+        {
+            Id = id,
+            Type = "Assistant",
+            Content = markdown
+        });
+        RequestScroll();
+    }
+
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
         var message = InputText.Trim();
         InputText = "";
+
+        // Intercept before echoing the user turn: these commands address the
+        // window, not the conversation, so they shouldn't appear in the
+        // transcript or reach the model.
+        if (TryHandleLocalCommand(message)) return;
 
         var userMsgId = $"user-{++_userMsgCounter}";
         Items.Add(new ChatItemViewModel
