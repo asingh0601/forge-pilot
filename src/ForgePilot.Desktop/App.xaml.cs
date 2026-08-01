@@ -1,10 +1,15 @@
 using ForgePilot.Services.Abstractions;
+using ForgePilot.Services.ClaudeCli.Permissions;
+using ForgePilot.Services.ClaudeCli.Questions;
+using ForgePilot.Services.Configuration;
 using ForgePilot.Services.DependencyInjection;
 using ForgePilot.UI;
 using ForgePilot.UI.Themes;
 using ForgePilot.UI.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Serilog;
 using System.IO;
 using System.Windows;
@@ -50,7 +55,24 @@ public partial class App : Application
                 {
                     services.AddSingleton<OutputListener>();
                     services.AddSingleton<IOutputListener>(sp => sp.GetRequiredService<OutputListener>());
-                    services.AddSingleton<ChatSessionViewModel>();
+
+                    // Built by hand rather than by the container. Three public
+                    // constructors are applicable here — the full one, the
+                    // broker-less one, and ChatSessionViewModel(string) — and
+                    // none is a strict superset of the others as far as the
+                    // container is concerned, so it throws "constructors are
+                    // ambiguous" at resolve time. The VS extension has always
+                    // constructed this by hand, which is why only the Desktop
+                    // host ever hit it. Passing the brokers matters: without
+                    // them, permission and question prompts never reach the UI
+                    // and the CLI blocks forever on a prompt nobody sees.
+                    services.AddSingleton(sp => new ChatSessionViewModel(
+                        sp.GetRequiredService<IChatService>(),
+                        sp.GetRequiredService<OutputListener>(),
+                        sp.GetRequiredService<IOptions<ForgePilotOptions>>(),
+                        sp.GetRequiredService<IPermissionBroker>(),
+                        sp.GetRequiredService<IUserQuestionBroker>(),
+                        sp.GetService<ILogger<ChatSessionViewModel>>()));
                     services.AddForgePilotServices(options =>
                     {
                         options.WorkingDirectory = workingDir;

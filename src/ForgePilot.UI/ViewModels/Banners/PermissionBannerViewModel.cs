@@ -13,6 +13,7 @@ public partial class PermissionBannerViewModel : ObservableObject, IBannerViewMo
 
     public string ToolName => _request.ToolName;
     public string Header => $"Claude wants to use {_request.ToolName}";
+    public string AlwaysAllowLabel => $"Don't ask again for {_request.ToolName}";
     public string BodyText { get; }
     public bool HasBodyText => !string.IsNullOrEmpty(BodyText);
 
@@ -26,11 +27,36 @@ public partial class PermissionBannerViewModel : ObservableObject, IBannerViewMo
     [ObservableProperty]
     private string _alternativeText = "";
 
-    public PermissionBannerViewModel(PermissionRequest request, Action<PermissionDecision> onResolved)
+    /// <summary>
+    /// Invoked when the user picks "Don't ask again", before the allow is
+    /// dispatched. Wired to <c>IPermissionBroker.AlwaysAllowTool</c>; null when
+    /// the host doesn't support remembering, in which case the option hides.
+    /// </summary>
+    private readonly Action<string>? _onAlwaysAllow;
+
+    public bool CanRememberChoice => _onAlwaysAllow is not null;
+
+    public PermissionBannerViewModel(
+        PermissionRequest request,
+        Action<PermissionDecision> onResolved,
+        Action<string>? onAlwaysAllow = null)
     {
         _request = request;
         _onResolved = onResolved;
+        _onAlwaysAllow = onAlwaysAllow;
         BodyText = FormatBody(request);
+    }
+
+    /// <summary>
+    /// Allow, and stop asking for this tool. Registers the exemption *before*
+    /// resolving: the CLI can fire the next request as soon as this one
+    /// returns, and if the set isn't updated yet that request still prompts.
+    /// </summary>
+    [RelayCommand]
+    private void AlwaysAllow()
+    {
+        _onAlwaysAllow?.Invoke(_request.ToolName);
+        Allow();
     }
 
     partial void OnIsOtherModeChanged(bool value)

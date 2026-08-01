@@ -13,7 +13,7 @@ public class OpenChatSessionCommand : Command
     {
     }
 
-    public override CommandConfiguration CommandConfiguration => new("ForgePilot")
+    public override CommandConfiguration CommandConfiguration => new("Forge Pilot")
     {
         Placements = [CommandPlacement.KnownPlacements.ViewOtherWindowsMenu],
         Icon = new(ImageMoniker.KnownValues.WindowsForm, IconSettings.IconAndText),

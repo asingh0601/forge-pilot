@@ -31,6 +31,13 @@ public interface IPermissionBroker
     void Resolve(string requestId, PermissionDecision decision);
 
     /// <summary>
+    /// Stops prompting for this tool for the rest of the session. Backs the
+    /// banner's "Don't ask again" option — the MCP protocol has no wire-level
+    /// equivalent, so the broker enforces it locally.
+    /// </summary>
+    void AlwaysAllowTool(string toolName);
+
+    /// <summary>
     /// Denies every in-flight permission request. Used by the chat Stop button
     /// so the dispatcher loop can unblock when a permission banner is stuck.
     /// </summary>

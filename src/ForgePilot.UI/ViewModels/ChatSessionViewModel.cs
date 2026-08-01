@@ -242,16 +242,21 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
                 _logger.LogInformation(
                     "[VM] Permission prompt requested (id={Id}, tool={Tool})",
                     request.Id, request.ToolName);
-                ActiveBanner = new PermissionBannerViewModel(request, decision =>
-                {
-                    Dispatch(() =>
+                ActiveBanner = new PermissionBannerViewModel(
+                    request,
+                    decision =>
                     {
-                        ActiveBanner = null;
-                        if (_pendingUserPrompts > 0) _pendingUserPrompts--;
-                        UpdateActivityIndicator();
-                    });
-                    _permissionBroker?.Resolve(request.Id, decision);
-                });
+                        Dispatch(() =>
+                        {
+                            ActiveBanner = null;
+                            if (_pendingUserPrompts > 0) _pendingUserPrompts--;
+                            UpdateActivityIndicator();
+                        });
+                        _permissionBroker?.Resolve(request.Id, decision);
+                    },
+                    onAlwaysAllow: _permissionBroker is null
+                        ? null
+                        : toolName => _permissionBroker.AlwaysAllowTool(toolName));
             }
             catch (Exception ex)
             {

@@ -6,7 +6,7 @@
               Version="1.0.0"
               Language="en-US"
               Publisher="Abhishek Singh" />
-    <DisplayName>ForgePilot</DisplayName>
+    <DisplayName>Forge Pilot</DisplayName>
     <Description xml:space="preserve">A Claude Code-style agentic coding assistant for Visual Studio. Drives the Claude Code CLI from a tool window that mirrors the terminal experience. Fork of VsAgentic by Adolfo Marinucci.</Description>
     <Tags>ai,claude,agentic,coding assistant</Tags>
   </Metadata>

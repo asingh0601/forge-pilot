@@ -166,7 +166,7 @@
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource FpAccent}"/>
                         <TextBlock x:Name="SessionNameText"
-                                   Text="New Session"
+                                   Text="Forge Pilot"
                                    FontSize="13"
                                    FontWeight="SemiBold"
                                    MaxWidth="260"
@@ -181,15 +181,25 @@
                     </StackPanel>
                 </Button>
 
-                <Button Grid.Column="1"
-                        Style="{StaticResource IconButtonStyle}"
-                        Click="NewSessionButton_Click"
-                        ToolTip="New session">
-                    <TextBlock Text="+"
-                               FontSize="17"
-                               Margin="0,-3,0,0"
-                               Foreground="{DynamicResource FpMuted}"/>
-                </Button>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="AssetsMenuButton"
+                            Style="{StaticResource IconButtonStyle}"
+                            Click="AssetsMenuButton_Click"
+                            ToolTip="Commands, skills, connectors and plugins">
+                        <TextBlock Text="⚡"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource FpMuted}"/>
+                    </Button>
+
+                    <Button Style="{StaticResource IconButtonStyle}"
+                            Click="NewSessionButton_Click"
+                            ToolTip="New session">
+                        <TextBlock Text="+"
+                                   FontSize="17"
+                                   Margin="0,-3,0,0"
+                                   Foreground="{DynamicResource FpMuted}"/>
+                    </Button>
+                </StackPanel>
             </Grid>
         </Border>
 

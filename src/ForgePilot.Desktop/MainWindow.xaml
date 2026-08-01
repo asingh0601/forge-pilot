@@ -4,7 +4,7 @@
         xmlns:controls="clr-namespace:ForgePilot.UI.Controls;assembly=ForgePilot.UI"
         xmlns:bvm="clr-namespace:ForgePilot.UI.ViewModels.Banners;assembly=ForgePilot.UI"
         xmlns:bv="clr-namespace:ForgePilot.UI.Controls.Banners;assembly=ForgePilot.UI"
-        Title="ForgePilot"
+        Title="Forge Pilot"
         Height="820" Width="1000"
         MinHeight="420" MinWidth="480"
         Background="{DynamicResource FpBackground}"
@@ -91,7 +91,7 @@
                            Margin="0,0,9,0"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource FpAccent}"/>
-                <TextBlock Text="ForgePilot"
+                <TextBlock Text="Forge Pilot"
                            FontSize="13"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"

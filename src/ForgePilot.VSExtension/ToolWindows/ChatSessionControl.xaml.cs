@@ -5,6 +5,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
+using ForgePilot.Services.Models;
+using ForgePilot.Services.Services;
 using ForgePilot.UI.Controls;
 using ForgePilot.UI.Themes;
 using ForgePilot.UI.ViewModels;
@@ -95,6 +97,117 @@ public partial class ChatSessionControl : UserControl
 
     private void NewSessionButton_Click(object sender, RoutedEventArgs e)
         => _sessionListViewModel?.NewSessionCommand.Execute(null);
+
+    /// <summary>
+    /// Lists the slash commands, skills, connectors and plugins the Claude Code
+    /// CLI will load for this workspace. Picking a command or skill types its
+    /// invocation into the composer rather than sending it, so arguments can be
+    /// added first. Connectors and plugins are informational — they are enabled
+    /// through the CLI, not from here.
+    /// </summary>
+    private async void AssetsMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu
+        {
+            PlacementTarget = AssetsMenuButton,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom
+        };
+
+        IReadOnlyList<ClaudeAsset> assets;
+        try
+        {
+            var service = ForgePilotPackage.AssetService;
+            if (service is null)
+            {
+                menu.Items.Add(new MenuItem { Header = "Asset discovery unavailable", IsEnabled = false });
+                menu.IsOpen = true;
+                return;
+            }
+
+            assets = await service.DiscoverAsync();
+        }
+        catch (Exception ex)
+        {
+            // Never let a bad config file take the chat window down with it.
+            System.Diagnostics.Debug.WriteLine($"ForgePilot: asset discovery failed: {ex}");
+            menu.Items.Add(new MenuItem { Header = "Could not read Claude configuration", IsEnabled = false });
+            menu.IsOpen = true;
+            return;
+        }
+
+        var groups = new (string Title, ClaudeAssetKind Kind)[]
+        {
+            ("Commands", ClaudeAssetKind.Command),
+            ("Skills", ClaudeAssetKind.Skill),
+            ("Connectors", ClaudeAssetKind.Connector),
+            ("Plugins", ClaudeAssetKind.Plugin),
+        };
+
+        foreach (var (title, kind) in groups)
+        {
+            var items = assets.Where(a => a.Kind == kind).OrderBy(a => a.Name).ToList();
+            if (items.Count == 0) continue;
+
+            if (menu.Items.Count > 0) menu.Items.Add(new Separator());
+
+            menu.Items.Add(new MenuItem
+            {
+                Header = $"{title}  ({items.Count})",
+                IsEnabled = false,
+                FontWeight = FontWeights.SemiBold
+            });
+
+            foreach (var asset in items)
+            {
+                var captured = asset;
+                var label = string.IsNullOrEmpty(asset.Description)
+                    ? asset.Name
+                    : $"{asset.Name}  —  {asset.Description}";
+
+                var item = new MenuItem
+                {
+                    Header = label,
+                    // A disabled plugin is listed so its absence is explicable,
+                    // but it isn't actionable from here.
+                    IsEnabled = captured.Invocation is not null && captured.IsEnabled,
+                    ToolTip = string.IsNullOrEmpty(captured.SourcePath) ? null : captured.SourcePath
+                };
+
+                if (captured.Invocation is { } invocation)
+                {
+                    item.Click += (_, _) => InsertIntoComposer(invocation + " ");
+                }
+
+                menu.Items.Add(item);
+            }
+        }
+
+        if (menu.Items.Count == 0)
+        {
+            menu.Items.Add(new MenuItem
+            {
+                Header = "No commands, skills, connectors or plugins found",
+                IsEnabled = false
+            });
+        }
+
+        menu.IsOpen = true;
+    }
+
+    private void InsertIntoComposer(string text)
+    {
+        if (DataContext is not ChatSessionViewModel vm) return;
+
+        // Replace rather than append when the composer already holds a slash
+        // command — picking a second one should swap it, not concatenate.
+        var existing = vm.InputText ?? "";
+        vm.InputText = existing.TrimStart().StartsWith("/", StringComparison.Ordinal)
+            ? text
+            : text + existing;
+
+        InputTextBox.Focus();
+        InputTextBox.CaretIndex = InputTextBox.Text.Length;
+    }
 
     public void Initialize(ChatSessionViewModel viewModel)
     {

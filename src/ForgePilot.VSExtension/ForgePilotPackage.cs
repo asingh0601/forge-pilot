@@ -25,7 +25,7 @@ namespace ForgePilot.VSExtension;
 [ProvideBindingPath]
 [ProvideAutoLoad(UIContextGuids80.NoSolution, PackageAutoLoadFlags.BackgroundLoad)]
 [ProvideAutoLoad(UIContextGuids80.SolutionExists, PackageAutoLoadFlags.BackgroundLoad)]
-[ProvideOptionPage(typeof(ForgePilotOptionsPage), "ForgePilot", "General", 0, 0, true)]
+[ProvideOptionPage(typeof(ForgePilotOptionsPage), "Forge Pilot", "General", 0, 0, true)]
 [ProvideToolWindow(typeof(SessionListToolWindow), Style = VsDockStyle.Tabbed, Window = EnvDTE.Constants.vsWindowKindSolutionExplorer)]
 // Chat docks into the right-hand well alongside Solution Explorer, the way
 // Copilot Chat does, instead of opening as an MDI document tab in the editor
@@ -46,6 +46,15 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
     // Exposed so tool windows can bind when VS restores them
     internal static SessionListViewModel? SessionListVM => _instance?._sessionListViewModel;
+
+    /// <summary>
+    /// Discovers the CLI's commands / skills / connectors / plugins for the
+    /// current workspace. Built per-workspace rather than resolved from the
+    /// chat session's DI scope, because the assets menu must work even when no
+    /// session is loaded.
+    /// </summary>
+    internal static IClaudeAssetService? AssetService =>
+        _instance?._solutionDirectory is { } dir ? new ClaudeAssetService(dir) : null;
 
     private SessionListViewModel? _sessionListViewModel;
     private ISessionStore? _sessionStore;
@@ -168,6 +177,9 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
         var logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            // Directory name stays unspaced and must match the session store's
+            // root (%AppData%\ForgePilot) — the display name having a space is
+            // a UI decision, not a storage one.
             "ForgePilot", "logs", "ForgePilot-.log");
 
         Log.Logger = new LoggerConfiguration()
@@ -340,7 +352,7 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
                         viewModel = new ChatSessionViewModel(
                             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
                         System.Diagnostics.Debug.WriteLine($"ForgePilot: Failed to create chat service: {ex}");
-                        MessageBox.Show($"ForgePilot service init failed:\n\n{ex.Message}\n\n{ex.InnerException?.Message}", "ForgePilot Debug", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        MessageBox.Show($"Forge Pilot service init failed:\n\n{ex.Message}\n\n{ex.InnerException?.Message}", "Forge Pilot Debug", MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
 
                     // Wire up the UI event handlers BEFORE restoring messages,
@@ -417,7 +429,7 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"ForgePilot error: {ex.Message}", "ForgePilot", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"Forge Pilot error: {ex.Message}", "Forge Pilot", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {

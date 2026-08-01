@@ -10,7 +10,7 @@ public class SessionListToolWindow : ToolWindowPane
 
     public SessionListToolWindow() : base(null)
     {
-        Caption = "ForgePilot Sessions";
+        Caption = "Forge Pilot Sessions";
         SessionListControl = new SessionListControl();
         Content = SessionListControl;
     }
