@@ -140,6 +140,14 @@ public sealed class ClaudeCliProcessHost : IDisposable
         // Strip any inherited API key so the CLI uses subscription auth.
         psi.EnvironmentVariables["ANTHROPIC_API_KEY"] = "";
 
+        // Extended-thinking budget. Left unset when zero so the CLI keeps its
+        // own default rather than us pinning a number that ages badly.
+        if (_options.MaxThinkingTokens > 0)
+        {
+            psi.EnvironmentVariables["MAX_THINKING_TOKENS"] =
+                _options.MaxThinkingTokens.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         _stdinChannel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
         {
             SingleReader = true,
@@ -183,10 +191,20 @@ public sealed class ClaudeCliProcessHost : IDisposable
         {
             CliPermissionMode.BypassPermissions => "bypassPermissions",
             CliPermissionMode.AcceptEdits => "acceptEdits",
+            CliPermissionMode.Plan => "plan",
             _ => "default",
         };
         sb.Append(" --permission-mode ");
         sb.Append(permFlag);
+
+        // Only pass --model when the user picked one. Omitting it leaves the
+        // CLI on the account default, which stays correct as new models ship
+        // without this extension needing to know about them.
+        if (!string.IsNullOrWhiteSpace(_options.Model))
+        {
+            sb.Append(" --model ");
+            sb.Append(EscapeArgument(_options.Model.Trim()));
+        }
 
         // Wire the MCP permission tool so the CLI asks us before running gated tools.
         // --strict-mcp-config prevents user-level MCP config from polluting the session.

@@ -206,6 +206,8 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
             {
                 options.ClaudeCliPath = optionsPage.ClaudeCliPath;
                 options.CliPermissionMode = optionsPage.CliPermissionMode;
+                options.Model = optionsPage.Model;
+                options.MaxThinkingTokens = optionsPage.MaxThinkingTokens;
             }
         });
 

@@ -23,8 +23,20 @@ public class ForgePilotOptionsPage : DialogPage
     public string ClaudeCliPath { get; set; } = ForgePilotOptions.DefaultCliPath;
 
     [Category("Claude CLI")]
+    [DisplayName("Model")]
+    [Description("Model passed to the CLI: an alias (sonnet, opus, haiku) or a full model id. Leave empty to use your account default — recommended, since the CLI knows about new models before this extension does. Takes effect on the next session.")]
+    [DefaultValue("")]
+    public string Model { get; set; } = "";
+
+    [Category("Claude CLI")]
+    [DisplayName("Extended thinking budget (tokens)")]
+    [Description("Sets MAX_THINKING_TOKENS for the CLI process. 0 leaves the CLI's own default in place. Higher values buy more reasoning on hard problems at the cost of latency. Takes effect on the next session.")]
+    [DefaultValue(0)]
+    public int MaxThinkingTokens { get; set; }
+
+    [Category("Claude CLI")]
     [DisplayName("CLI Permission Mode")]
-    [Description("Controls how the CLI handles tool permissions. Default: every gated tool call surfaces an Allow/Deny banner in the chat (safest). AcceptEdits: file edits (Edit, Write, NotebookEdit) auto-accept; everything else still prompts. BypassPermissions: auto-accept every tool call without prompting (use only in trusted environments).")]
+    [Description("Controls how the CLI handles tool permissions. Default: every gated tool call surfaces an Allow/Deny banner in the chat (safest). Plan: Claude explores and proposes an approach without editing files or running commands. AcceptEdits: file edits (Edit, Write, NotebookEdit) auto-accept; everything else still prompts. BypassPermissions: auto-accept every tool call without prompting (use only in trusted environments).")]
     [DefaultValue(CliPermissionMode.Default)]
     public CliPermissionMode CliPermissionMode { get; set; } = CliPermissionMode.Default;
 

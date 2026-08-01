@@ -48,4 +48,20 @@ public class ForgePilotOptions
     /// or <see cref="CliPermissionMode.BypassPermissions"/> as escape hatches.
     /// </summary>
     public CliPermissionMode CliPermissionMode { get; set; } = CliPermissionMode.Default;
+
+    /// <summary>
+    /// Model passed to the CLI via <c>--model</c>: an alias (<c>sonnet</c>,
+    /// <c>opus</c>, <c>haiku</c>) or a full model id. Empty means "don't pass
+    /// the flag", leaving the CLI on whatever the account default is — which is
+    /// the right default here, since the CLI tracks new models before this
+    /// extension does.
+    /// </summary>
+    public string Model { get; set; } = "";
+
+    /// <summary>
+    /// Extended-thinking budget, passed to the CLI process as the
+    /// <c>MAX_THINKING_TOKENS</c> environment variable. Zero leaves it unset so
+    /// the CLI applies its own default.
+    /// </summary>
+    public int MaxThinkingTokens { get; set; }
 }

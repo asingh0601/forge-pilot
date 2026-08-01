@@ -27,5 +27,16 @@ public enum CliPermissionMode
     /// Allow / Deny banner in the chat. This is the safest mode and the
     /// default for the extension.
     /// </summary>
-    Default
+    Default,
+
+    /// <summary>
+    /// Plan mode. The CLI explores and proposes an approach but does not edit
+    /// files or run commands until the user approves. Maps to
+    /// <c>--permission-mode plan</c>.
+    ///
+    /// This is a mode of the CLI itself, not a permission filter layered on
+    /// top: it changes how the agent behaves, so nothing gated reaches the
+    /// permission helper in the first place.
+    /// </summary>
+    Plan
 }
