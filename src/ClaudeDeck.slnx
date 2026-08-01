@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="../.github/workflows/publish-vsix.yml" />
+    <File Path="../README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="ClaudeDeck.Services/ClaudeDeck.Services.csproj" />
+    <Project Path="ClaudeDeck.Services.McpPermissionServer/ClaudeDeck.Services.McpPermissionServer.csproj" />
+    <Project Path="ClaudeDeck.UI/ClaudeDeck.UI.csproj" />
+    <Project Path="ClaudeDeck.VSExtension/ClaudeDeck.VSExtension.csproj">
+      <Deploy Solution="Debug|*" />
+    </Project>
+  </Folder>
+</Solution>

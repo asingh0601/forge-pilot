@@ -1,0 +1,72 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using ClaudeDeck.UI.ViewModels;
+
+namespace ClaudeDeck.VSExtension.ToolWindows;
+
+public partial class SessionListControl : UserControl
+{
+    private bool _initialized;
+
+    public SessionListControl()
+    {
+        InitializeComponent();
+        Loaded += OnLoaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_initialized) return;
+
+        if (!BindIfNeeded())
+        {
+            // Package hasn't initialized yet (VS restored the window before the package loaded).
+            // Subscribe to be notified when it's ready.
+            ClaudeDeckPackage.Initialized += OnPackageInitialized;
+        }
+    }
+
+    private void OnPackageInitialized()
+    {
+        ClaudeDeckPackage.Initialized -= OnPackageInitialized;
+        BindIfNeeded();
+    }
+
+    /// <summary>
+    /// Binds the ViewModel if not already bound.
+    /// Called both from the package and when the control loads (for VS-restored windows).
+    /// </summary>
+    /// <returns>True if binding succeeded.</returns>
+    public bool BindIfNeeded()
+    {
+        if (_initialized) return true;
+
+        var vm = ClaudeDeckPackage.SessionListVM;
+        if (vm is null) return false;
+
+        DataContext = vm;
+        _initialized = true;
+        return true;
+    }
+
+    private void ListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (e.AddedItems.Count > 0
+            && e.AddedItems[0] is SessionInfo session
+            && DataContext is SessionListViewModel vm)
+        {
+            vm.OpenSessionCommand.Execute(session);
+        }
+    }
+
+    private void ListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        // Handles re-opening a session whose window was closed while it's
+        // still the selected item (SelectionChanged won't fire in that case).
+        if (DataContext is SessionListViewModel vm && vm.SelectedSession is not null)
+        {
+            vm.OpenSessionCommand.Execute(vm.SelectedSession);
+        }
+    }
+}

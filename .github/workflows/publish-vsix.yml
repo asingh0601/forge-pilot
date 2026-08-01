@@ -1,64 +1,41 @@
-﻿name: Publish VSIX to VS Marketplace
+# Claude Deck is a fork and has no VS Marketplace listing of its own.
+# The upstream workflow published to adospace's marketplace account on every
+# `v*.*.*` tag; running that here would either fail (no PAT) or, worse, push a
+# fork build over someone else's listing. It is replaced by a manual,
+# build-only job that just proves the VSIX still packs.
+#
+# To publish for real, add a marketplace listing and a MARKETPLACE_PAT secret,
+# then restore the publish steps from upstream's history:
+#   git show upstream/master:.github/workflows/publish-vsix.yml
+name: Build VSIX
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_dispatch:
 
 jobs:
-  publish:
+  build:
     runs-on: windows-latest
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Extract version from tag
-        id: version
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag -replace '^v', ''
-          if ($version -notmatch '^\d+\.\d+\.\d+') {
-            Write-Error "Invalid tag format. Use semantic versioning: v1.0.0"
-            exit 1
-          }
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Version extracted: $version"
-
-      - name: Update version in vsixmanifest
-        shell: pwsh
-        run: |
-          $manifestPath = "src/VsAgentic.VSExtension/source.extension.vsixmanifest"
-          $version = "${{ steps.version.outputs.version }}"
-
-          [xml]$manifest = Get-Content $manifestPath
-          $manifest.PackageManifest.Metadata.Identity.Version = $version
-          $manifest.Save($manifestPath)
-
-          Write-Host "Updated manifest version to: $version"
-          Get-Content $manifestPath | Select-String "Version="
-
       - name: Restore NuGet packages
-        run: dotnet restore src/VsAgentic.slnx
+        run: dotnet restore src/ClaudeDeck.slnx
 
       - name: Build VSIX package
-        run: dotnet build src/VsAgentic.slnx -c Release -v minimal
+        run: dotnet build src/ClaudeDeck.slnx -c Release -v minimal
 
       - name: Locate VSIX artifact
         id: vsix
         shell: pwsh
         run: |
-          $vsixPath = Get-ChildItem -Path "src/VsAgentic.VSExtension/bin/Release" -Filter "*.vsix" -Recurse | Select-Object -First 1
+          $vsixPath = Get-ChildItem -Path "src/ClaudeDeck.VSExtension/bin/Release" -Filter "*.vsix" -Recurse | Select-Object -First 1
           if (-not $vsixPath) {
             Write-Error "VSIX file not found in build output"
             exit 1
@@ -66,101 +43,8 @@ jobs:
           echo "path=$($vsixPath.FullName)" >> $env:GITHUB_OUTPUT
           Write-Host "Found VSIX: $($vsixPath.Name)"
 
-      - name: Publish to VS Marketplace
-        shell: pwsh
-        run: |
-          # Use VsixPublisher.exe from the Visual Studio installation on the runner
-          $vsInstallPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
-            -latest -property installationPath
-          $vsixPublisher = Join-Path $vsInstallPath "VSSDK\VisualStudioIntegration\Tools\Bin\VsixPublisher.exe"
-
-          if (-not (Test-Path $vsixPublisher)) {
-            Write-Error "VsixPublisher.exe not found at: $vsixPublisher"
-            Write-Host "VS install path: $vsInstallPath"
-            # List what's available for debugging
-            Get-ChildItem -Path $vsInstallPath -Filter "VsixPublisher.exe" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-            exit 1
-          }
-          Write-Host "Using VsixPublisher from: $vsixPublisher"
-
-          # Create a publish manifest in the repo root so overview path resolves
-          $publishManifest = Join-Path "${{ github.workspace }}" "publish-manifest.json"
-          @"
-          {
-            "`$schema": "http://json.schemastore.org/vsix-publish",
-            "categories": ["programming languages"],
-            "identity": {
-              "internalName": "VsAgentic"
-            },
-            "overview": "README.md",
-            "publisher": "adospace",
-            "repo": "${{ github.server_url }}/${{ github.repository }}"
-          }
-          "@ | Set-Content $publishManifest
-
-          & $vsixPublisher publish `
-            -payload "${{ steps.vsix.outputs.path }}" `
-            -publishManifest $publishManifest `
-            -personalAccessToken "${{ secrets.MARKETPLACE_PAT }}"
-
-      - name: Generate release notes
-        shell: pwsh
-        run: |
-          $version = "${{ steps.version.outputs.version }}"
-
-          # Find the previous tag to generate a changelog.
-          # Use git tag --sort to list tags by version; the current tag is first,
-          # so the second entry is the previous release.
-          $tags = git tag --sort=-v:refname
-          $prevTag = ($tags | Select-Object -Skip 1 -First 1)
-          if ($prevTag) {
-            $commits = git log "$prevTag..HEAD" --pretty=format:"- %s" --no-merges
-          } else {
-            $commits = "- Initial release"
-          }
-
-          # Build the full release body
-          $body = @"
-          ## VsAgentic v$version
-
-          ### Changes
-
-          $commits
-
-          ### Links
-
-          - [Install from VS Marketplace](https://marketplace.visualstudio.com/items?itemName=adospace.VsAgentic)
-
-          > **Note:** If you see a persistent update banner after upgrading, uninstall the extension, restart Visual Studio, and reinstall from the Marketplace.
-          "@
-
-          $body | Set-Content "release-notes.txt" -Encoding utf8
-          Write-Host $body
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: ${{ steps.vsix.outputs.path }}
-          body_path: release-notes.txt
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish summary
-        shell: pwsh
-        run: |
-          Write-Host "========================================" -ForegroundColor Green
-          Write-Host "VSIX Published Successfully!" -ForegroundColor Green
-          Write-Host "========================================" -ForegroundColor Green
-          Write-Host ""
-          Write-Host "Extension Details:" -ForegroundColor Cyan
-          Write-Host "  Name:      VsAgentic"
-          Write-Host "  Version:   ${{ steps.version.outputs.version }}"
-          Write-Host "  Tag:       ${{ github.ref_name }}"
-          Write-Host "  VSIX File: ${{ steps.vsix.outputs.path }}"
-          Write-Host ""
-          Write-Host "Next Steps:" -ForegroundColor Cyan
-          Write-Host "  1. Check VS Marketplace: https://marketplace.visualstudio.com/items?itemName=adospace.VsAgentic"
-          Write-Host "  2. Review GitHub Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
-          Write-Host ""
+          name: ClaudeDeck-vsix
+          path: ${{ steps.vsix.outputs.path }}

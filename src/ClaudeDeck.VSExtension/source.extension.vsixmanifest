@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"
+                 xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+  <Metadata>
+    <Identity Id="ClaudeDeck.VSExtension.8f4b1c27-6d3a-4e59-9a10-b7c2e5d84f13"
+              Version="1.0.0"
+              Language="en-US"
+              Publisher="Abhishek Singh" />
+    <DisplayName>Claude Deck</DisplayName>
+    <Description xml:space="preserve">A Claude Code-style agentic coding assistant for Visual Studio. Drives the Claude Code CLI from a tool window that mirrors the terminal experience. Fork of VsAgentic by Adolfo Marinucci.</Description>
+    <Tags>ai,claude,agentic,coding assistant</Tags>
+  </Metadata>
+  <Installation ExtensionType="VSSDK+VisualStudio.Extensibility">
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,)">
+      <ProductArchitecture>arm64</ProductArchitecture>
+    </InstallationTarget>
+  </Installation>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor"
+                  Version="[17.0,20.0)"
+                  DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="Project" d:ProjectName="ClaudeDeck.VSExtension" Path="|ClaudeDeck.VSExtension;PkgdefProjectOutputGroup|" />
+    <Asset Type="Microsoft.VisualStudio.MefComponent" d:Source="Project" d:ProjectName="ClaudeDeck.VSExtension" Path="|ClaudeDeck.VSExtension|" />
+  </Assets>
+</PackageManifest>
