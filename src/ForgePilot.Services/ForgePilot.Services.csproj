@@ -10,6 +10,10 @@
   <ItemGroup>
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
+    <!-- Inline completions call the Anthropic API directly. On net472
+         System.Net.Http is a framework assembly and needs referencing by hand;
+         it is not pulled in by the SDK the way it is on modern targets. -->
+    <Reference Include="System.Net.Http" />
   </ItemGroup>
 
   <ItemGroup>
