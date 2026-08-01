@@ -4,6 +4,8 @@
     <File Path="../README.md" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="ClaudeDeck.Console/ClaudeDeck.Console.csproj" />
+    <Project Path="ClaudeDeck.Desktop/ClaudeDeck.Desktop.csproj" />
     <Project Path="ClaudeDeck.Services/ClaudeDeck.Services.csproj" />
     <Project Path="ClaudeDeck.Services.McpPermissionServer/ClaudeDeck.Services.McpPermissionServer.csproj" />
     <Project Path="ClaudeDeck.UI/ClaudeDeck.UI.csproj" />

@@ -1,8 +1,6 @@
-using ClaudeDeck.UI.Controls;
 using ClaudeDeck.UI.ViewModels;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Media;
 
 namespace ClaudeDeck.Desktop;
 
@@ -12,19 +10,6 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
-
-        // Pull banner colors from the OS theme via WPF SystemColors so
-        // light-themed Windows shows a light banner.
-        BannerTheme.Current = BannerTheme.FromColors(
-            background:        SystemColors.ControlColor,
-            border:            SystemColors.ActiveBorderColor,
-            foreground:        SystemColors.ControlTextColor,
-            muted:             SystemColors.GrayTextColor,
-            inputBackground:   SystemColors.WindowColor,
-            accent:            SystemColors.HighlightColor,
-            accentForeground:  SystemColors.HighlightTextColor,
-            danger:            Color.FromRgb(0xDC, 0x26, 0x26),
-            dangerForeground:  Colors.White);
 
         viewModel.MessageAdded += (id, type, data) =>
             _ = ChatWebView.AddMessageAsync(id, type, data);
@@ -47,14 +32,14 @@ public partial class MainWindow : Window
         viewModel.MessagesRestored += (messages) =>
             _ = ChatWebView.LoadMessagesAsync(messages);
 
-        viewModel.PermissionPromptRequested += (request, resolve) =>
-            ChatWebView.ShowPermissionBanner(request, resolve);
-
-        viewModel.UserQuestionRequested += (request, submit) =>
-            ChatWebView.ShowQuestionCard(request, submit);
-
-        viewModel.LoginRequiredRequested += (errorMessage, onLoginClicked) =>
-            ChatWebView.ShowLoginBanner(errorMessage, onLoginClicked);
+        // Permission / question / login prompts arrive through the view model's
+        // ActiveBanner property, which the BannerHost ContentControl in XAML
+        // binds to. Upstream's Desktop host still called the older
+        // ShowPermissionBanner / ShowQuestionCard / ShowLoginBanner methods,
+        // which were removed when banners moved to the ActiveBanner +
+        // DataTemplate model — that's why this project stopped compiling and
+        // was dropped from the solution. The banner DataTemplates land here
+        // once the banner views move into ClaudeDeck.UI.
 
         Loaded += (_, _) => InputTextBox.Focus();
     }
