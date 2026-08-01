@@ -1,4 +1,4 @@
-# Claude Deck is a fork and has no VS Marketplace listing of its own.
+# ForgePilot is a fork and has no VS Marketplace listing of its own.
 # The upstream workflow published to adospace's marketplace account on every
 # `v*.*.*` tag; running that here would either fail (no PAT) or, worse, push a
 # fork build over someone else's listing. It is replaced by a manual,
@@ -26,16 +26,16 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore NuGet packages
-        run: dotnet restore src/ClaudeDeck.slnx
+        run: dotnet restore src/ForgePilot.slnx
 
       - name: Build VSIX package
-        run: dotnet build src/ClaudeDeck.slnx -c Release -v minimal
+        run: dotnet build src/ForgePilot.slnx -c Release -v minimal
 
       - name: Locate VSIX artifact
         id: vsix
         shell: pwsh
         run: |
-          $vsixPath = Get-ChildItem -Path "src/ClaudeDeck.VSExtension/bin/Release" -Filter "*.vsix" -Recurse | Select-Object -First 1
+          $vsixPath = Get-ChildItem -Path "src/ForgePilot.VSExtension/bin/Release" -Filter "*.vsix" -Recurse | Select-Object -First 1
           if (-not $vsixPath) {
             Write-Error "VSIX file not found in build output"
             exit 1
@@ -46,5 +46,5 @@ jobs:
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ClaudeDeck-vsix
+          name: ForgePilot-vsix
           path: ${{ steps.vsix.outputs.path }}

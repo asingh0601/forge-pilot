@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="../.github/workflows/publish-vsix.yml" />
+    <File Path="../README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="ForgePilot.Console/ForgePilot.Console.csproj" />
+    <Project Path="ForgePilot.Desktop/ForgePilot.Desktop.csproj" />
+    <Project Path="ForgePilot.Services/ForgePilot.Services.csproj" />
+    <Project Path="ForgePilot.Services.McpPermissionServer/ForgePilot.Services.McpPermissionServer.csproj" />
+    <Project Path="ForgePilot.UI/ForgePilot.UI.csproj" />
+    <Project Path="ForgePilot.VSExtension/ForgePilot.VSExtension.csproj">
+      <Deploy Solution="Debug|*" />
+    </Project>
+  </Folder>
+</Solution>

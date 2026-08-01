@@ -1,0 +1,43 @@
+<!--
+    Claude Desktop light palette. Key names are duplicated verbatim in
+    ClaudeTheme.Dark.xaml — ClaudeThemeManager swaps whole dictionaries, so
+    every key defined here MUST exist there too or a theme switch throws at
+    resource-resolution time.
+
+    The same values are mirrored as CSS custom properties in
+    Assets/chat-template.html (:root). Change one, change the other, or the
+    WebView transcript drifts from the WPF chrome around it.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <sys:String x:Key="FpFontSans">Segoe UI Variable Text, Segoe UI, system-ui</sys:String>
+    <sys:String x:Key="FpFontMono">Cascadia Code, Cascadia Mono, Consolas, Courier New</sys:String>
+
+    <!-- Surfaces: page → raised card → subtle fill (user bubble, hover) -->
+    <SolidColorBrush x:Key="FpBackground"      Color="#FAF9F5"/>
+    <SolidColorBrush x:Key="FpSurface"         Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="FpSurfaceSubtle"   Color="#F0EEE6"/>
+
+    <!-- Text: primary → muted (metadata) → faint (placeholders, hints) -->
+    <SolidColorBrush x:Key="FpForeground"      Color="#3D3D3A"/>
+    <SolidColorBrush x:Key="FpMuted"           Color="#6E6E68"/>
+    <SolidColorBrush x:Key="FpFaint"           Color="#8F8F87"/>
+
+    <SolidColorBrush x:Key="FpBorder"          Color="#E5E3DA"/>
+    <SolidColorBrush x:Key="FpBorderStrong"    Color="#D4D1C7"/>
+
+    <!-- Claude's terracotta. AccentForeground is what sits on top of it. -->
+    <SolidColorBrush x:Key="FpAccent"          Color="#D97757"/>
+    <SolidColorBrush x:Key="FpAccentHover"     Color="#C2624A"/>
+    <SolidColorBrush x:Key="FpAccentForeground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="FpAccentSubtle"    Color="#F7EDE8"/>
+
+    <SolidColorBrush x:Key="FpSuccess"         Color="#3E7A41"/>
+    <SolidColorBrush x:Key="FpError"           Color="#A94848"/>
+    <SolidColorBrush x:Key="FpSelection"       Color="#E3DDD0"/>
+
+    <SolidColorBrush x:Key="FpCodeBackground"  Color="#F5F4EF"/>
+
+</ResourceDictionary>

@@ -1,0 +1,42 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using ForgePilot.Services.Abstractions;
+
+namespace ForgePilot.UI.ViewModels;
+
+public enum ChatItemType { User, Assistant, ToolStep, Thinking }
+
+public partial class ChatItemViewModel : ObservableObject
+{
+    public ChatItemType Type { get; init; }
+    public string? ToolName { get; init; }
+
+    /// <summary>One-line argument summary shown beside the tool name.</summary>
+    public string? ToolArgs { get; init; }
+
+    public string Title { get; init; } = "";
+
+    [ObservableProperty]
+    private string _content = "";
+
+    [ObservableProperty]
+    private string? _body;
+
+    [ObservableProperty]
+    private OutputBodyMode _bodyMode = OutputBodyMode.Markdown;
+
+    [ObservableProperty]
+    private OutputItemStatus _status = OutputItemStatus.Pending;
+
+    [ObservableProperty]
+    private bool _isStreaming;
+
+    [ObservableProperty]
+    private string _expanderTitle = "";
+
+    [ObservableProperty]
+    private bool _isExpanded;
+
+    public bool IsCompleted => !IsStreaming;
+
+    partial void OnIsStreamingChanged(bool value) => OnPropertyChanged(nameof(IsCompleted));
+}

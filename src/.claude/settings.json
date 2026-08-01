@@ -16,8 +16,8 @@
       "Bash(xargs cat:*)",
       "Bash(for proj:*)",
       "Bash(do echo:*)",
-      "Bash(cp -r src/CoreSource.UI src/ClaudeDeck.UI)",
-      "Bash(cp -r src/CoreSource.VSExtension src/ClaudeDeck.VSExtension)"
+      "Bash(cp -r src/CoreSource.UI src/ForgePilot.UI)",
+      "Bash(cp -r src/CoreSource.VSExtension src/ForgePilot.VSExtension)"
     ]
   }
 }

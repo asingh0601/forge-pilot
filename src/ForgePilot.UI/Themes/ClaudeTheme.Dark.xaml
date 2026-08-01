@@ -1,0 +1,36 @@
+<!--
+    Claude Desktop dark palette. Every key in ClaudeTheme.Light.xaml must also
+    exist here — ClaudeThemeManager swaps whole dictionaries and a missing key
+    throws when a control resolves it. Mirrored as CSS custom properties under
+    :root[data-theme="dark"] in Assets/chat-template.html.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <sys:String x:Key="FpFontSans">Segoe UI Variable Text, Segoe UI, system-ui</sys:String>
+    <sys:String x:Key="FpFontMono">Cascadia Code, Cascadia Mono, Consolas, Courier New</sys:String>
+
+    <SolidColorBrush x:Key="FpBackground"      Color="#262624"/>
+    <SolidColorBrush x:Key="FpSurface"         Color="#2F2E2B"/>
+    <SolidColorBrush x:Key="FpSurfaceSubtle"   Color="#35342F"/>
+
+    <SolidColorBrush x:Key="FpForeground"      Color="#E8E6E3"/>
+    <SolidColorBrush x:Key="FpMuted"           Color="#A5A399"/>
+    <SolidColorBrush x:Key="FpFaint"           Color="#7C7A72"/>
+
+    <SolidColorBrush x:Key="FpBorder"          Color="#3E3D39"/>
+    <SolidColorBrush x:Key="FpBorderStrong"    Color="#4E4C46"/>
+
+    <SolidColorBrush x:Key="FpAccent"          Color="#D97757"/>
+    <SolidColorBrush x:Key="FpAccentHover"     Color="#E08A6C"/>
+    <SolidColorBrush x:Key="FpAccentForeground" Color="#1F1E1D"/>
+    <SolidColorBrush x:Key="FpAccentSubtle"    Color="#3A2E29"/>
+
+    <SolidColorBrush x:Key="FpSuccess"         Color="#6BAE6E"/>
+    <SolidColorBrush x:Key="FpError"           Color="#D98A8A"/>
+    <SolidColorBrush x:Key="FpSelection"       Color="#43413A"/>
+
+    <SolidColorBrush x:Key="FpCodeBackground"  Color="#1F1E1D"/>
+
+</ResourceDictionary>
