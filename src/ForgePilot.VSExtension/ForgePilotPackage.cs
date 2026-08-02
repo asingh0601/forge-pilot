@@ -23,8 +23,10 @@ using Task = System.Threading.Tasks.Task;
 namespace ForgePilot.VSExtension;
 
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
-// Registers ForgePilotPackage.vsct so the View > Other Windows entry exists.
-[ProvideMenuResource("Menus.ctmenu", 1)]
+// No [ProvideMenuResource]: the .vsct cannot be compiled without the VS
+// extension development workload, so declaring Menus.ctmenu would point the
+// shell at a resource that does not exist. The menu entry comes from
+// Commands/OpenChatSessionCommand instead — see the note there.
 [ProvideBindingPath]
 [ProvideAutoLoad(UIContextGuids80.NoSolution, PackageAutoLoadFlags.BackgroundLoad)]
 [ProvideAutoLoad(UIContextGuids80.SolutionExists, PackageAutoLoadFlags.BackgroundLoad)]
@@ -111,13 +113,9 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
             });
         };
 
-        // Menu command. Registered here rather than by a VisualStudio.Extensibility
-        // Command attribute — see OpenChatSessionCommand for why that model was
-        // dropped.
-        if (await GetServiceAsync(typeof(IMenuCommandService)) is OleMenuCommandService commandService)
-        {
-            Commands.OpenChatSessionCommand.Register(commandService);
-        }
+        // The menu command is contributed by the Extensibility host
+        // (Commands/OpenChatSessionCommand), not registered here — a .vsct
+        // cannot be compiled without the VS extension development workload.
 
         // Listen for file-open requests from rendered markdown
         ChatWebView.FileOpenRequested += OnFileOpenRequested;

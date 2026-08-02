@@ -8,23 +8,26 @@
     <UseWPF>true</UseWPF>
 
     <!--
-      Kept ON, reluctantly. This is what stamps
-      ExtensionType="VSSDK+VisualStudio.Extensibility" into the manifest, which
-      is the prime suspect for VS 2026 registering the extension as Disabled
-      ("Missing entry in per-user enabled extensions cache") so it never lists
-      under Manage Extensions.
+      PACKAGING — read before changing.
 
-      Turning it off is not currently possible without losing the package
-      entirely: under `dotnet build` the VSSDK BuildTools targets are never
-      imported, so the Extensibility build package is the only thing that
-      produces a .vsix. With the switch off the build succeeds and silently
-      emits nothing; with the Sdk package also removed, manifest generation
-      fails outright (VSSDK1309).
+      The VisualStudio.Extensibility packaging below is what produces the .vsix.
+      It is also what makes VS 2026 register the extension as Disabled
+      ("Missing entry in per-user enabled extensions cache"), so it never
+      appears under Manage Extensions until devenv /setup + /updateconfiguration
+      rebuild the caches. The extension installs and runs regardless.
 
-      Resolving this properly means building the VSIX through full MSBuild from
-      a Visual Studio install, where the VSSDK targets do import. The menu
-      command has already been moved to a classic .vsct so nothing depends on
-      the Extensibility command model any more — only the packaging does.
+      The proper fix is a plain VSSDK package: no ExtensionType, and none of the
+      .vsextension/extension.json, catalog.json or manifest.json artefacts. That
+      requires Microsoft.VSSDK.BuildTools to run its CreateVsixContainer target,
+      which it will not do on this machine — the "Visual Studio extension
+      development" workload is not installed, and without it the targets skip
+      VSIX creation silently under both `dotnet build` and full MSBuild 18.8.
+
+      To finish it: install that workload, then drop VssdkCompatibleExtension
+      and the two Microsoft.VisualStudio.Extensibility.* PackageReferences and
+      delete nothing else — the menu command is already a classic .vsct
+      (ForgePilotPackage.vsct + Commands/OpenChatSessionCommand.cs), so no code
+      depends on the Extensibility model, only the packaging does.
     -->
     <VssdkCompatibleExtension>true</VssdkCompatibleExtension>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
@@ -50,8 +53,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Packaging only. The project contributes no [VisualStudioContribution]
-         types any more; the menu command is a classic .vsct. -->
+    <!-- Packaging only — see the note above. The project contributes no
+         [VisualStudioContribution] commands; ForgePilotExtension is a stub the
+         Extensibility build requires (VSEXT0004). -->
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2120">
@@ -120,14 +124,13 @@
     <None Include="source.extension.vsixmanifest" SubType="Designer" />
   </ItemGroup>
 
-  <!-- Command table. VSCTCompile drives the .vsct through the VSSDK compiler
-       and emits the binary the [ProvideMenuResource] on the package points at.
-       ResourceName must be Menus.ctmenu to match that attribute. -->
+  <!-- ForgePilotPackage.vsct is checked in but NOT compiled: VSCTCompile needs
+       Microsoft.VSSDK.BuildTools' targets, which do not run without the VS
+       extension development workload. Listing it here would emit no menu
+       resource and silently remove the View > Other Windows entry. It is kept
+       ready for the switch described in the packaging note above. -->
   <ItemGroup>
-    <VSCTCompile Include="ForgePilotPackage.vsct">
-      <ResourceName>Menus.ctmenu</ResourceName>
-      <SubType>Designer</SubType>
-    </VSCTCompile>
+    <None Include="ForgePilotPackage.vsct" />
     <Content Include="Resources\command-icon.png">
       <IncludeInVSIX>true</IncludeInVSIX>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
