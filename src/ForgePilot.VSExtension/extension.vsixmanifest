@@ -1,0 +1,40 @@
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+  <Metadata>
+    <Identity Id="ForgePilot.VSExtension.8f4b1c27-6d3a-4e59-9a10-b7c2e5d84f13" Version="1.0.0" Language="en-US" Publisher="Abhishek Singh" />
+    <DisplayName>Forge Pilot</DisplayName>
+    <Description xml:space="preserve">A Claude Code-style agentic coding assistant for Visual Studio. Drives the Claude Code CLI from a tool window that mirrors the terminal experience. Fork of VsAgentic by Adolfo Marinucci.</Description>
+    <!-- Generated from assets/logo.png by assets/make-icons.ps1.
+         VS expects Icon at 90x90 and PreviewImage at 200x200.
+         Order matters: the v2 schema requires these before Tags. -->
+    <Icon>Resources\icon.png</Icon>
+    <PreviewImage>Resources\preview.png</PreviewImage>
+    <Tags>ai,claude,agentic,coding assistant</Tags>
+  </Metadata>
+  <!--
+    The version range must have an upper bound. With the open-ended "[17.0,)"
+    inherited from upstream, the extension installs to the per-user Extensions
+    folder correctly but never appears in Extensions -> Manage Extensions ->
+    Installed until `devenv /setup` is run: the extension manager filters that
+    list by the declared range and an unbounded upper bound fails the match.
+    Every extension that lists correctly on VS 2026 uses a bounded range.
+  -->
+  <!-- ExtensionType is written by the build (VssdkCompatibleExtension); setting
+       it here has no effect. It remains the prime suspect for VS 2026
+       registering the extension as Disabled — see ForgePilot.VSExtension.csproj
+       for why it cannot currently be removed without losing packaging. -->
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,19.0)">
+      <ProductArchitecture>arm64</ProductArchitecture>
+    </InstallationTarget>
+  </Installation>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0,20.0)" DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.VsPackage" Path="ForgePilot.VSExtension.pkgdef" />
+    <Asset Type="Microsoft.VisualStudio.MefComponent" Path="ForgePilot.VSExtension.dll" />
+  </Assets>
+</PackageManifest>

@@ -7,13 +7,28 @@
               Language="en-US"
               Publisher="Abhishek Singh" />
     <DisplayName>Forge Pilot</DisplayName>
-    <Description xml:space="preserve">A Claude Code-style agentic coding assistant for Visual Studio. Drives the Claude Code CLI from a tool window that mirrors the terminal experience. Fork of VsAgentic by Adolfo Marinucci.</Description>
+    <Description xml:space="preserve">Chat with Claude inside Visual Studio to explore, understand and modify your codebase. Forge Pilot drives the Claude Code CLI from a docked tool window styled after the Claude Code UI: collapsible tool runs, inline diffs, todo lists, permission prompts, and a composer with model, thinking-effort and plan/act controls. Requires Node.js, the Claude Code CLI, and a Claude Pro or Max subscription. Fork of VsAgentic by Adolfo Marinucci, MIT licensed.</Description>
+
+    <!--
+      Everything below feeds the Extension Manager's details pane. Element order
+      is fixed by the v2 schema — Identity, DisplayName, Description, MoreInfo,
+      License, GettingStartedGuide, ReleaseNotes, Icon, PreviewImage, Tags — and
+      the package fails schema validation at build if they are reordered.
+
+      License is a path into the VSIX, so LICENSE must also be packaged as
+      Content with IncludeInVSIX; a referenced-but-absent file fails validation
+      at install time rather than at build.
+    -->
+    <MoreInfo>https://github.com/asingh0601/forge-pilot</MoreInfo>
+    <License>LICENSE.txt</License>
+    <GettingStartedGuide>https://github.com/asingh0601/forge-pilot#readme</GettingStartedGuide>
+    <ReleaseNotes>https://github.com/asingh0601/forge-pilot/releases</ReleaseNotes>
+
     <!-- Generated from assets/logo.png by assets/make-icons.ps1.
-         VS expects Icon at 90x90 and PreviewImage at 200x200.
-         Order matters: the v2 schema requires these before Tags. -->
+         VS expects Icon at 90x90 and PreviewImage at 200x200. -->
     <Icon>Resources\icon.png</Icon>
     <PreviewImage>Resources\preview.png</PreviewImage>
-    <Tags>ai,claude,agentic,coding assistant</Tags>
+    <Tags>ai, claude, claude code, agentic, coding assistant, chat, copilot alternative</Tags>
   </Metadata>
   <!--
     The version range must have an upper bound. With the open-ended "[17.0,)"

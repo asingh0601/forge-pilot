@@ -11,23 +11,36 @@
       PACKAGING — read before changing.
 
       The VisualStudio.Extensibility packaging below is what produces the .vsix.
-      It is also what makes VS 2026 register the extension as Disabled
-      ("Missing entry in per-user enabled extensions cache"), so it never
-      appears under Manage Extensions until devenv /setup + /updateconfiguration
-      rebuild the caches. The extension installs and runs regardless.
+      It is also what stamps ExtensionType="VSSDK+VisualStudio.Extensibility"
+      and ships .vsextension/extension.json, catalog.json and manifest.json —
+      the remaining suspects for VS 2026 registering the extension as Disabled
+      ("Missing entry in per-user enabled extensions cache"), so it does not
+      appear under Manage Extensions until devenv /setup +
+      /updateconfiguration rebuild the caches. It installs and runs regardless.
 
-      The proper fix is a plain VSSDK package: no ExtensionType, and none of the
-      .vsextension/extension.json, catalog.json or manifest.json artefacts. That
-      requires Microsoft.VSSDK.BuildTools to run its CreateVsixContainer target,
-      which it will not do on this machine — the "Visual Studio extension
-      development" workload is not installed, and without it the targets skip
-      VSIX creation silently under both `dotnet build` and full MSBuild 18.8.
+      MIGRATION TO A PLAIN VSSDK PACKAGE — attempted, not finished.
 
-      To finish it: install that workload, then drop VssdkCompatibleExtension
-      and the two Microsoft.VisualStudio.Extensibility.* PackageReferences and
-      delete nothing else — the menu command is already a classic .vsct
-      (ForgePilotPackage.vsct + Commands/OpenChatSessionCommand.cs), so no code
-      depends on the Extensibility model, only the packaging does.
+      With the "Visual Studio extension development" workload installed, the
+      VSSDK targets are available at
+        $(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK\Microsoft.VsSDK.targets
+      but they are NOT imported automatically: Microsoft.VSSDK.BuildTools' own
+      targets file merely sets a few VsSDK* environment variables, and the
+      import that a legacy .csproj got from its ProjectTypeGuids has no
+      equivalent in an SDK-style project. Adding the import explicitly does make
+      CreateVsixContainer resolve, and then:
+
+        - GenerateTemplatesManifest fails with VSSDK1202 unless
+          $(TemplateOutputDirectory) is set (harmless: no templates ship here);
+        - CreateVsixContainer then fails with VSSDK1025, missing the pkgdef;
+        - forcing GeneratePkgDef fails with VSSDK1032, "No item to process",
+          because the SDK-style build never populates the item that target
+          expects.
+
+      Each step is a separate SDK-style/VSSDK integration gap. Finishing it most
+      likely means converting this to a legacy-format VSIX project rather than
+      patching targets one by one. The menu command already exists as a classic
+      .vsct (ForgePilotPackage.vsct + a commented OleMenuCommand path), so no
+      code depends on the Extensibility model — only the packaging does.
     -->
     <VssdkCompatibleExtension>true</VssdkCompatibleExtension>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
@@ -122,6 +135,13 @@
 
   <ItemGroup>
     <None Include="source.extension.vsixmanifest" SubType="Designer" />
+
+    <!-- Referenced by <License> in the manifest, so it has to be inside the
+         package: a referenced-but-absent file fails validation at install. -->
+    <Content Include="LICENSE.txt">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <!-- ForgePilotPackage.vsct is checked in but NOT compiled: VSCTCompile needs
