@@ -63,17 +63,38 @@ finally { $zip.Dispose() }
 
 Write-Host "Identity: $identity`n"
 
+# Native executables are invoked with $ErrorActionPreference relaxed and WITHOUT
+# redirecting stderr. In Windows PowerShell 5.1, "2>&1" on a native command
+# wraps each stderr line in an ErrorRecord, which under 'Stop' becomes a
+# terminating NativeCommandError even when the exe succeeded - VSIXInstaller
+# writes to stderr routinely, so the script died on a working uninstall.
+# Exit codes are checked explicitly instead.
+function Invoke-Native {
+    param([string]$Exe, [string[]]$Arguments)
+
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Exe @Arguments | Out-Null
+        return $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previous }
+}
+
+# A missing previous install is the normal case, so its exit code is ignored.
 Write-Host "Uninstalling any previous copy..."
-& $installer.FullName /q /u:$identity 2>&1 | Out-Null   # exit code ignored: "not installed" is fine
+Invoke-Native $installer.FullName @('/q', "/u:$identity") | Out-Null
 
 Write-Host "Installing..."
-& $installer.FullName /q $vsix.FullName 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "VSIXInstaller returned $LASTEXITCODE. See %TEMP%\dd_VSIXInstaller_*.log." }
+$code = Invoke-Native $installer.FullName @('/q', $vsix.FullName)
+if ($code -ne 0) {
+    throw "VSIXInstaller returned $code. See the newest %TEMP%\dd_VSIXInstaller_*.log for the reason."
+}
 
 if (-not $SkipConfigUpdate) {
-    Write-Host "Rebuilding extension and menu caches (a minute or two)..."
-    & $devenv.FullName /setup | Out-Null
-    & $devenv.FullName /updateconfiguration | Out-Null
+    Write-Host "Rebuilding extension and menu caches (this takes a minute or two)..."
+    Invoke-Native $devenv.FullName @('/setup') | Out-Null
+    Invoke-Native $devenv.FullName @('/updateconfiguration') | Out-Null
 }
 
 Write-Host "`nDone. Start Visual Studio, then View > Other Windows > Forge Pilot."
