@@ -39,11 +39,16 @@ namespace ForgePilot.VSExtension;
 // layout, so an existing install keeps whatever position it already had.
 // Single instance: sessions are switched inside this one window via the header
 // picker, so MultiInstances would just let stray duplicates accumulate.
+//
+// Deliberately NOT Transient. A transient tool window is excluded from the
+// saved window layout, so VS forgets where it was docked and re-applies the
+// placement hints from scratch every time — which is why it kept landing
+// somewhere other than beside Solution Explorer. Persisting it means the first
+// placement sticks and the window reopens in position on the next launch.
 [ProvideToolWindow(typeof(ChatSessionToolWindow),
     Style = VsDockStyle.Tabbed,
     Window = EnvDTE.Constants.vsWindowKindSolutionExplorer,
-    Orientation = ToolWindowOrientation.Right,
-    Transient = true)]
+    Orientation = ToolWindowOrientation.Right)]
 [Guid("c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f")]
 public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 {
