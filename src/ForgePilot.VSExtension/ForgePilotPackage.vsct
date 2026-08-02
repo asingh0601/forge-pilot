@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Classic VSSDK command table.
+
+  This replaces the VisualStudio.Extensibility Command that used to place the
+  menu item. That model forced ExtensionType="VSSDK+VisualStudio.Extensibility"
+  into the manifest, and on VS 2026 the shell discovered the extension but set
+  it Disabled ("Missing entry in per-user enabled extensions cache"), so it
+  never appeared under Manage Extensions until devenv /setup rebuilt the cache.
+  A plain VSSDK extension declares no ExtensionType and registers normally.
+-->
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable"
+              xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <Extern href="stdidcmd.h"/>
+  <Extern href="vsshlids.h"/>
+
+  <Commands package="guidForgePilotPackage">
+
+    <Groups>
+      <!-- Sits in View > Other Windows, where tool windows are expected. -->
+      <Group guid="guidForgePilotCmdSet" id="ViewOtherWindowsGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDG_VS_WNDO_OTRWNDWS1"/>
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidForgePilotCmdSet" id="cmdidOpenChatSession" priority="0x0100" type="Button">
+        <Parent guid="guidForgePilotCmdSet" id="ViewOtherWindowsGroup"/>
+        <Icon guid="guidImages" id="bmpChat"/>
+        <Strings>
+          <ButtonText>Forge Pilot</ButtonText>
+          <MenuText>Forge Pilot</MenuText>
+          <ToolTipText>Open the Forge Pilot chat window</ToolTipText>
+          <CommandName>ForgePilot.OpenChatSession</CommandName>
+        </Strings>
+      </Button>
+    </Buttons>
+
+    <Bitmaps>
+      <!-- usedList must name every slot actually referenced, or the shell
+           silently drops the icon and shows a blank square. -->
+      <Bitmap guid="guidImages" href="Resources\command-icon.png" usedList="bmpChat"/>
+    </Bitmaps>
+
+  </Commands>
+
+  <Symbols>
+    <!-- Must match the [Guid] on ForgePilotPackage. -->
+    <GuidSymbol name="guidForgePilotPackage" value="{c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f}" />
+
+    <GuidSymbol name="guidForgePilotCmdSet" value="{7b3f1a52-9d84-4c07-b6ae-1f2c5d90a743}">
+      <IDSymbol name="ViewOtherWindowsGroup" value="0x1020" />
+      <IDSymbol name="cmdidOpenChatSession" value="0x0100" />
+    </GuidSymbol>
+
+    <GuidSymbol name="guidImages" value="{2a6c81f0-58d3-4b19-9e07-c4a5b8f36d12}">
+      <IDSymbol name="bmpChat" value="1" />
+    </GuidSymbol>
+  </Symbols>
+
+</CommandTable>

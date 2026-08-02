@@ -9,6 +9,13 @@
              xmlns:bv="clr-namespace:ForgePilot.UI.Controls.Banners;assembly=ForgePilot.UI" >
 
     <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Brings in FpContextMenuStyle / FpMenuItemStyle for the
+                     composer pickers, alongside the banner styles. -->
+                <ResourceDictionary Source="/ForgePilot.UI;component/Themes/BannerStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
         <!-- Banner DataTemplates: ContentControl below picks the right view by VM type. -->
@@ -104,27 +111,45 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Composer footer chip: model / effort / mode. Quiet by default so the
-             composer stays about the text, with a hover fill to show it's live. -->
+        <!-- Composer footer chip: model / effort. Carries a faint outline so it
+             reads as something you can press — plain text at this size looked
+             like a label. A caret marks it as opening a menu. -->
         <Style x:Key="ChipButtonStyle" TargetType="Button">
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="Foreground" Value="{DynamicResource FpMuted}"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Margin" Value="0,0,2,0"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="bd"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="7"
-                                Padding="8,3"
+                                BorderBrush="{DynamicResource FpBorder}"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="9,4"
                                 SnapsToDevicePixels="True">
-                            <ContentPresenter VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal">
+                                <ContentPresenter VerticalAlignment="Center"/>
+                                <Path x:Name="caret"
+                                      Margin="6,1,0,0"
+                                      Stroke="{DynamicResource FpFaint}"
+                                      StrokeThickness="1.4"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      Data="M 0,0 L 3.5,3.5 L 7,0"
+                                      Width="7" Height="4"
+                                      Stretch="None"
+                                      VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="{DynamicResource FpSurfaceSubtle}"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource FpBorderStrong}"/>
+                                <Setter TargetName="caret" Property="Stroke" Value="{DynamicResource FpMuted}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource FpForeground}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
@@ -137,15 +162,51 @@
             </Setter>
         </Style>
 
-        <!-- Plan mode is a state, not a menu, so it reads as an accent-filled
-             pill when active rather than another muted chip. -->
-        <Style x:Key="ModeChipStyle" TargetType="Button" BasedOn="{StaticResource ChipButtonStyle}">
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsPlanMode}" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource FpAccentSubtle}"/>
-                    <Setter Property="Foreground" Value="{DynamicResource FpAccent}"/>
-                </DataTrigger>
-            </Style.Triggers>
+        <!-- Plan / Act is a toggle, not a menu, so it gets no caret and instead
+             switches between a filled accent pill (Plan: nothing will be
+             changed) and a plain outline (Act). A dot carries the state at a
+             glance, since the two words are similar in length and colour alone
+             is not a reliable signal. -->
+        <Style x:Key="ModeChipStyle" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource FpMuted}"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="Transparent"
+                                BorderBrush="{DynamicResource FpBorder}"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="9,4"
+                                SnapsToDevicePixels="True">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="dot"
+                                         Width="6" Height="6"
+                                         Margin="0,0,7,0"
+                                         VerticalAlignment="Center"
+                                         Fill="{DynamicResource FpFaint}"/>
+                                <ContentPresenter VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource FpBorderStrong}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource FpForeground}"/>
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsPlanMode}" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource FpAccentSubtle}"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource FpAccent}"/>
+                                <Setter TargetName="dot" Property="Fill" Value="{DynamicResource FpAccent}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource FpAccent}"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- ListBoxItem template used in the @-mention popup -->
@@ -178,6 +239,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <DockPanel x:Name="RootPanel"

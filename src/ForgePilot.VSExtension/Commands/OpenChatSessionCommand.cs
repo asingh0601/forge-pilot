@@ -1,39 +1,41 @@
-using Microsoft.VisualStudio.Extensibility;
-using Microsoft.VisualStudio.Extensibility.Commands;
+using System;
+using System.ComponentModel.Design;
 using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
 
 namespace ForgePilot.VSExtension.Commands;
 
-[VisualStudioContribution]
-public class OpenChatSessionCommand : Command
+/// <summary>
+/// The View → Other Windows → Forge Pilot menu command.
+///
+/// A classic VSSDK <see cref="OleMenuCommand"/> rather than a
+/// VisualStudio.Extensibility <c>Command</c>. The latter forced
+/// <c>ExtensionType="VSSDK+VisualStudio.Extensibility"</c> into the manifest,
+/// and on VS 2026 the shell then discovered the extension but marked it
+/// Disabled — "Missing entry in per-user enabled extensions cache" — so it
+/// never showed under Manage Extensions until <c>devenv /setup</c> rebuilt the
+/// cache. The command IDs here mirror ForgePilotPackage.vsct.
+/// </summary>
+internal static class OpenChatSessionCommand
 {
-    public OpenChatSessionCommand(VisualStudioExtensibility extensibility)
-        : base(extensibility)
+    /// <summary>Must match guidForgePilotCmdSet in the .vsct.</summary>
+    public static readonly Guid CommandSet = new("7b3f1a52-9d84-4c07-b6ae-1f2c5d90a743");
+
+    /// <summary>Must match cmdidOpenChatSession in the .vsct.</summary>
+    public const int CommandId = 0x0100;
+
+    public static void Register(OleMenuCommandService commandService)
     {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        var id = new CommandID(CommandSet, CommandId);
+        commandService.AddCommand(new OleMenuCommand(Execute, id));
     }
 
-    public override CommandConfiguration CommandConfiguration => new("Forge Pilot")
+    private static void Execute(object sender, EventArgs e)
     {
-        Placements = [CommandPlacement.KnownPlacements.ViewOtherWindowsMenu],
-        Icon = new(ImageMoniker.KnownValues.WindowsForm, IconSettings.IconAndText),
-    };
-
-    public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)
-    {
-        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-
-        // Force-load the VSSDK package on first invocation
-        if (!ForgePilotPackage.IsLoaded)
-        {
-            var shell = (IVsShell)ServiceProvider.GlobalProvider.GetService(typeof(SVsShell));
-            if (shell != null)
-            {
-                var guid = new System.Guid("c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f");
-                shell.LoadPackage(ref guid, out _);
-            }
-        }
-
-        await ForgePilotPackage.ShowChatSessionWindowAsync();
+        // The package is already loaded — it owns the command service this was
+        // registered on — so unlike the old implementation there is no need to
+        // force-load it first.
+        _ = ForgePilotPackage.ShowChatSessionWindowAsync();
     }
 }

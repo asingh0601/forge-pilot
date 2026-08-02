@@ -70,11 +70,7 @@ public partial class ChatSessionControl : UserControl
     {
         if (_sessionListViewModel is null) return;
 
-        var menu = new ContextMenu
-        {
-            PlacementTarget = SessionMenuButton,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom
-        };
+        var menu = ThemedMenu(SessionMenuButton, System.Windows.Controls.Primitives.PlacementMode.Bottom);
 
         // Most recent first — the ordering the picker is actually used in.
         foreach (var session in _sessionListViewModel.Sessions.OrderByDescending(s => s.LastActivity))
@@ -149,13 +145,22 @@ public partial class ChatSessionControl : UserControl
             ReportIfBlocked(vm.TogglePlanMode());
     }
 
+    /// <summary>
+    /// Builds a themed picker anchored above a chip. Uses the shared Fp menu
+    /// styles rather than a default ContextMenu, which renders as a grey
+    /// Windows menu with a blue system checkmark and reads as another
+    /// application intruding on the panel.
+    /// </summary>
     private static void ShowChipMenu(
         Button anchor, IEnumerable<string> options, string current, Action<string> onPick)
     {
         var menu = new ContextMenu
         {
             PlacementTarget = anchor,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Top
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Top,
+            VerticalOffset = -6,
+            HorizontalOffset = 0,
+            Style = Application.Current?.TryFindResource("FpContextMenuStyle") as Style
         };
 
         foreach (var option in options)
@@ -176,6 +181,15 @@ public partial class ChatSessionControl : UserControl
 
         menu.IsOpen = true;
     }
+
+    /// <summary>Applies the themed style to a menu built elsewhere.</summary>
+    private static ContextMenu ThemedMenu(UIElement anchor,
+        System.Windows.Controls.Primitives.PlacementMode placement) => new()
+    {
+        PlacementTarget = anchor,
+        Placement = placement,
+        Style = Application.Current?.TryFindResource("FpContextMenuStyle") as Style
+    };
 
     /// <summary>
     /// Surfaces the "can't change settings mid-response" case in the status

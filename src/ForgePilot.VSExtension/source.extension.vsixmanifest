@@ -23,7 +23,11 @@
     list by the declared range and an unbounded upper bound fails the match.
     Every extension that lists correctly on VS 2026 uses a bounded range.
   -->
-  <Installation ExtensionType="VSSDK+VisualStudio.Extensibility">
+  <!-- ExtensionType is written by the build (VssdkCompatibleExtension); setting
+       it here has no effect. It remains the prime suspect for VS 2026
+       registering the extension as Disabled — see ForgePilot.VSExtension.csproj
+       for why it cannot currently be removed without losing packaging. -->
+  <Installation>
     <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,19.0)">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>

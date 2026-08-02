@@ -7,6 +7,25 @@
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
 
+    <!--
+      Kept ON, reluctantly. This is what stamps
+      ExtensionType="VSSDK+VisualStudio.Extensibility" into the manifest, which
+      is the prime suspect for VS 2026 registering the extension as Disabled
+      ("Missing entry in per-user enabled extensions cache") so it never lists
+      under Manage Extensions.
+
+      Turning it off is not currently possible without losing the package
+      entirely: under `dotnet build` the VSSDK BuildTools targets are never
+      imported, so the Extensibility build package is the only thing that
+      produces a .vsix. With the switch off the build succeeds and silently
+      emits nothing; with the Sdk package also removed, manifest generation
+      fails outright (VSSDK1309).
+
+      Resolving this properly means building the VSIX through full MSBuild from
+      a Visual Studio install, where the VSSDK targets do import. The menu
+      command has already been moved to a classic .vsct so nothing depends on
+      the Extensibility command model any more — only the packaging does.
+    -->
     <VssdkCompatibleExtension>true</VssdkCompatibleExtension>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
 
@@ -24,9 +43,15 @@
 
   <ItemGroup>
     <Reference Include="System.Net.Http" />
+    <!-- OleMenuCommandService derives from System.ComponentModel.Design
+         .MenuCommandService, which lives in System.Design. Without this the
+         AddCommand call fails to bind even though the type resolves. -->
+    <Reference Include="System.Design" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Packaging only. The project contributes no [VisualStudioContribution]
+         types any more; the menu command is a classic .vsct. -->
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2120">
@@ -93,6 +118,20 @@
 
   <ItemGroup>
     <None Include="source.extension.vsixmanifest" SubType="Designer" />
+  </ItemGroup>
+
+  <!-- Command table. VSCTCompile drives the .vsct through the VSSDK compiler
+       and emits the binary the [ProvideMenuResource] on the package points at.
+       ResourceName must be Menus.ctmenu to match that attribute. -->
+  <ItemGroup>
+    <VSCTCompile Include="ForgePilotPackage.vsct">
+      <ResourceName>Menus.ctmenu</ResourceName>
+      <SubType>Designer</SubType>
+    </VSCTCompile>
+    <Content Include="Resources\command-icon.png">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <!--
