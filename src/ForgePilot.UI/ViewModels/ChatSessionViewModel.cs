@@ -142,17 +142,27 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
     };
 
     /// <summary>
-    /// Model presets. Aliases rather than pinned ids on purpose — the CLI
-    /// resolves an alias to whatever the current model behind it is, so this
-    /// list doesn't go stale every time a new version ships.
+    /// Selectable models, labelled with their version so the chip always names
+    /// exactly what the session is running.
+    ///
+    /// Full ids rather than the <c>opus</c>/<c>sonnet</c> aliases: an alias
+    /// resolves to whatever currently sits behind it, which would make the
+    /// version in the label a guess. Pinning costs an edit here when a new
+    /// model ships, and buys a label that is always true.
     /// </summary>
     public static readonly (string Label, string Value)[] Models =
     {
-        ("Default", ""),
-        ("Opus", "opus"),
-        ("Sonnet", "sonnet"),
-        ("Haiku", "haiku"),
+        ("Opus 5", "claude-opus-5"),
+        ("Sonnet 5", "claude-sonnet-5"),
+        ("Haiku 4.5", "claude-haiku-4-5-20251001"),
     };
+
+    /// <summary>
+    /// Used when a session has no model pinned. Sonnet is the balance point for
+    /// a coding assistant — Opus costs materially more per turn, and switching
+    /// up is one click away.
+    /// </summary>
+    public const string DefaultModel = "claude-sonnet-5";
 
     /// <summary>
     /// Pushes settings into the chat service and refreshes the chips.
@@ -187,10 +197,14 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
         var s = _chatService?.GetSettings();
         if (s is null) return;
 
+        // An empty model means nothing was pinned, which the chip reports as the
+        // default it will actually run under rather than as a blank.
+        var effectiveModel = string.IsNullOrWhiteSpace(s.Model) ? DefaultModel : s.Model;
+
         ModelLabel = Models.FirstOrDefault(m =>
-            string.Equals(m.Value, s.Model, StringComparison.OrdinalIgnoreCase)).Label
+            string.Equals(m.Value, effectiveModel, StringComparison.OrdinalIgnoreCase)).Label
             // A model set by hand in Options won't match a preset; show it verbatim.
-            ?? (string.IsNullOrWhiteSpace(s.Model) ? "Default" : s.Model);
+            ?? effectiveModel;
 
         EffortLabel = EffortLevels.FirstOrDefault(e => e.Tokens == s.MaxThinkingTokens).Label
             ?? $"{s.MaxThinkingTokens / 1000}k";

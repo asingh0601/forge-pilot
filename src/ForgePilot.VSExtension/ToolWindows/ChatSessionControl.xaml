@@ -225,25 +225,18 @@
                     </StackPanel>
                 </Button>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="AssetsMenuButton"
-                            Style="{StaticResource IconButtonStyle}"
-                            Click="AssetsMenuButton_Click"
-                            ToolTip="Commands, skills, connectors and plugins">
-                        <TextBlock Text="⚡"
-                                   FontSize="13"
-                                   Foreground="{DynamicResource FpMuted}"/>
-                    </Button>
-
-                    <Button Style="{StaticResource IconButtonStyle}"
-                            Click="NewSessionButton_Click"
-                            ToolTip="New session">
-                        <TextBlock Text="+"
-                                   FontSize="17"
-                                   Margin="0,-3,0,0"
-                                   Foreground="{DynamicResource FpMuted}"/>
-                    </Button>
-                </StackPanel>
+                <!-- Commands and skills are reached by typing "/" in the
+                     composer, so a header button for them was a second door to
+                     the same room. -->
+                <Button Grid.Column="1"
+                        Style="{StaticResource IconButtonStyle}"
+                        Click="NewSessionButton_Click"
+                        ToolTip="New session">
+                    <TextBlock Text="+"
+                               FontSize="17"
+                               Margin="0,-3,0,0"
+                               Foreground="{DynamicResource FpMuted}"/>
+                </Button>
             </Grid>
         </Border>
 
@@ -437,8 +430,19 @@
                                 <Button Style="{StaticResource SendButtonStyle}"
                                         Command="{Binding SendCommand}"
                                         ToolTip="Send (Enter)">
-                                    <TextBlock Text="↑" FontSize="15" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource FpAccentForeground}"/>
+                                    <!-- Drawn rather than typed: the ↑ glyph renders thin and
+                                         differs per installed font. A Path gives a consistent
+                                         weight and stays crisp at any DPI. -->
+                                    <Path Stroke="{DynamicResource FpAccentForeground}"
+                                          StrokeThickness="2.2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          Data="M 7,11.5 L 7,2.5 M 2.5,7 L 7,2.5 L 11.5,7"
+                                          Width="14" Height="14"
+                                          Stretch="None"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
                                 </Button>
                                 <Button Style="{StaticResource StopButtonStyle}"
                                         Command="{Binding StopCommand}"

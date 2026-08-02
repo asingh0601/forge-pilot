@@ -50,11 +50,9 @@ public class ForgePilotOptions
     public CliPermissionMode CliPermissionMode { get; set; } = CliPermissionMode.Default;
 
     /// <summary>
-    /// Model passed to the CLI via <c>--model</c>: an alias (<c>sonnet</c>,
-    /// <c>opus</c>, <c>haiku</c>) or a full model id. Empty means "don't pass
-    /// the flag", leaving the CLI on whatever the account default is — which is
-    /// the right default here, since the CLI tracks new models before this
-    /// extension does.
+    /// Model passed to the CLI via <c>--model</c>: a full model id, or an alias
+    /// (<c>sonnet</c>, <c>opus</c>, <c>haiku</c>) if set by hand. Empty omits
+    /// the flag entirely and leaves the CLI on the account default.
     /// </summary>
     public string Model { get; set; } = "";
 

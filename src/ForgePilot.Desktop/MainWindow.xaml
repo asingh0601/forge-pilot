@@ -169,8 +169,18 @@
                             <Button Style="{StaticResource SendButtonStyle}"
                                     Command="{Binding SendCommand}"
                                     ToolTip="Send (Enter)">
-                                <TextBlock Text="↑" FontSize="16" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource FpAccentForeground}"/>
+                                <!-- See the note in ChatSessionControl.xaml: drawn, not typed,
+                                     so the weight is consistent and stays crisp at any DPI. -->
+                                <Path Stroke="{DynamicResource FpAccentForeground}"
+                                      StrokeThickness="2.2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      Data="M 7,11.5 L 7,2.5 M 2.5,7 L 7,2.5 L 11.5,7"
+                                      Width="14" Height="14"
+                                      Stretch="None"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
                             </Button>
                             <Button Style="{StaticResource StopButtonStyle}"
                                     Command="{Binding StopCommand}"
