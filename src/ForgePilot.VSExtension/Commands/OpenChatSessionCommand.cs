@@ -41,7 +41,7 @@ public class OpenChatSessionCommand : Command
             var shell = (IVsShell)ServiceProvider.GlobalProvider.GetService(typeof(SVsShell));
             if (shell != null)
             {
-                var guid = new System.Guid("c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f");
+                var guid = new System.Guid("d7a41f38-2c96-4e5b-8b31-9f60c2ae4d17");
                 shell.LoadPackage(ref guid, out _);
             }
         }

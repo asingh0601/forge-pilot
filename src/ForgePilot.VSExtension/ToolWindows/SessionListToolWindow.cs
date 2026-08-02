@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.Shell;
 
 namespace ForgePilot.VSExtension.ToolWindows;
 
-[Guid("a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")]
+[Guid("9c05e7b2-1d48-4a63-bf59-3e7c0a2d86f5")]
 public class SessionListToolWindow : ToolWindowPane
 {
     public SessionListControl SessionListControl { get; }

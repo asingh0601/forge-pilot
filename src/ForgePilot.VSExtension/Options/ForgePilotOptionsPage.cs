@@ -10,7 +10,7 @@ namespace ForgePilot.VSExtension.Options;
 /// Settings are automatically persisted to the VS registry by DialogPage.
 /// </summary>
 [ComVisible(true)]
-[Guid("a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")]
+[Guid("b4e829c1-53fa-4d7e-9c02-6a8bd15f3e40")]
 public class ForgePilotOptionsPage : DialogPage
 {
     // No [DefaultValue]: the real default is resolved at runtime and the

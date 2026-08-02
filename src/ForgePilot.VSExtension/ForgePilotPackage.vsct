@@ -47,7 +47,7 @@
 
   <Symbols>
     <!-- Must match the [Guid] on ForgePilotPackage. -->
-    <GuidSymbol name="guidForgePilotPackage" value="{c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f}" />
+    <GuidSymbol name="guidForgePilotPackage" value="{d7a41f38-2c96-4e5b-8b31-9f60c2ae4d17}" />
 
     <GuidSymbol name="guidForgePilotCmdSet" value="{7b3f1a52-9d84-4c07-b6ae-1f2c5d90a743}">
       <IDSymbol name="ViewOtherWindowsGroup" value="0x1020" />
