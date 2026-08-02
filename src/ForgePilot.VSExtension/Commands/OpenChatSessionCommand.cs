@@ -1,51 +1,40 @@
-using Microsoft.VisualStudio.Extensibility;
-using Microsoft.VisualStudio.Extensibility.Commands;
+using System;
+using System.ComponentModel.Design;
 using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
 
 namespace ForgePilot.VSExtension.Commands;
 
 /// <summary>
-/// The View → Other Windows → Forge Pilot entry.
+/// The View → Other Windows → Forge Pilot menu command.
 ///
-/// This stays on the VisualStudio.Extensibility command model even though a
-/// classic .vsct exists (ForgePilotPackage.vsct). Compiling a .vsct needs
-/// Microsoft.VSSDK.BuildTools' VSCTCompile target, which does not run without
-/// the "Visual Studio extension development" workload installed — so on this
-/// machine the .vsct silently produces no menu resource and the entry
-/// disappears entirely. Once that workload is present, switch to the .vsct and
-/// drop this file along with the Extensibility packages.
+/// A classic VSSDK <see cref="OleMenuCommand"/> placed by
+/// ForgePilotPackage.vsct. The VisualStudio.Extensibility command model was
+/// dropped along with its packaging: it forced
+/// <c>ExtensionType="VSSDK+VisualStudio.Extensibility"</c> into the manifest and
+/// shipped the new-model catalog files, and VS 2026 then registered the
+/// extension as Disabled so it never listed under Manage Extensions.
+///
+/// The GUID and id here must match guidForgePilotCmdSet / cmdidOpenChatSession
+/// in the .vsct — changing one means changing both.
 /// </summary>
-[VisualStudioContribution]
-public class OpenChatSessionCommand : Command
+internal static class OpenChatSessionCommand
 {
-    public OpenChatSessionCommand(VisualStudioExtensibility extensibility)
-        : base(extensibility)
+    public static readonly Guid CommandSet = new("7b3f1a52-9d84-4c07-b6ae-1f2c5d90a743");
+
+    public const int CommandId = 0x0100;
+
+    public static void Register(OleMenuCommandService commandService)
     {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        var id = new CommandID(CommandSet, CommandId);
+        commandService.AddCommand(new OleMenuCommand(Execute, id));
     }
 
-    public override CommandConfiguration CommandConfiguration => new("Forge Pilot")
+    private static void Execute(object sender, EventArgs e)
     {
-        Placements = [CommandPlacement.KnownPlacements.ViewOtherWindowsMenu],
-        Icon = new(ImageMoniker.KnownValues.WindowsForm, IconSettings.IconAndText),
-    };
-
-    public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)
-    {
-        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-
-        // Force-load the VSSDK package on first invocation — the command lives
-        // in the Extensibility host, which does not load the package for us.
-        if (!ForgePilotPackage.IsLoaded)
-        {
-            var shell = (IVsShell)ServiceProvider.GlobalProvider.GetService(typeof(SVsShell));
-            if (shell != null)
-            {
-                var guid = new System.Guid("d7a41f38-2c96-4e5b-8b31-9f60c2ae4d17");
-                shell.LoadPackage(ref guid, out _);
-            }
-        }
-
-        await ForgePilotPackage.ShowChatSessionWindowAsync();
+        // No force-load needed: the package owns the command service this was
+        // registered on, so it is loaded by the time this runs.
+        _ = ForgePilotPackage.ShowChatSessionWindowAsync();
     }
 }

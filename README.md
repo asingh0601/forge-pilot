@@ -41,13 +41,17 @@ This layer is read-only by design. The CLI owns these features outright — it r
 
 ## 🚀 Installation
 
-ForgePilot has no Marketplace listing — build and install it yourself. The .NET 10 SDK is enough to produce the VSIX; you do not need Visual Studio installed to build it:
+ForgePilot has no Marketplace listing — build and install it yourself.
+
+Building the VSIX needs **Visual Studio with the "Visual Studio extension development" workload**, because the VSSDK targets that produce the package ship with it:
 
 ```
-dotnet build src/ForgePilot.slnx -c Release
+pwsh build-vsix.ps1
 ```
 
 The package lands at `src/ForgePilot.VSExtension/bin/Release/net472/ForgePilot.VSExtension.vsix`. Double-click it, then restart Visual Studio.
+
+> `dotnet build` compiles every assembly but produces **no .vsix** — the VSSDK import is skipped and the build still reports success. Use the script, which fails loudly instead. The other projects (`ForgePilot.Desktop`, `ForgePilot.Console`) build fine under `dotnet build`.
 
 To develop against it, open `src/ForgePilot.slnx` in Visual Studio 2026 with the **Visual Studio extension development** workload, set `ForgePilot.VSExtension` as the startup project, and press **F5** — that launches the VS experimental instance.
 
