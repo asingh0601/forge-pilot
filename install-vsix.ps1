@@ -38,8 +38,20 @@ if (-not $vsix) { throw "No .vsix found. Run build-vsix.ps1 first." }
 
 Write-Host ("Package : {0} ({1:N2} MB)" -f $vsix.FullName, ($vsix.Length / 1MB))
 
-if (Get-Process devenv -ErrorAction SilentlyContinue) {
-    throw "Visual Studio is running. Close every instance first - an install applied under a running IDE is not picked up, and the cache rebuild cannot run."
+# Only interactive IDE instances block the install. `devenv /setup` and
+# /updateconfiguration also run as devenv.exe but headless, so a lingering one
+# from a previous run would otherwise trip this guard forever.
+$ide = Get-Process devenv -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+if ($ide) {
+    $titles = ($ide | ForEach-Object { "  PID $($_.Id): $($_.MainWindowTitle)" }) -join "`n"
+    throw "Visual Studio is open. Close every instance first - an install applied under a running IDE is not picked up, and the cache rebuild cannot run.`n$titles"
+}
+
+# A headless setup run still holds locks; wait briefly rather than failing.
+$headless = Get-Process devenv -ErrorAction SilentlyContinue
+if ($headless) {
+    Write-Host "Waiting for a background devenv process to finish..."
+    $headless | ForEach-Object { $_.WaitForExit(120000) | Out-Null }
 }
 
 $devenv = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio' -Recurse -Filter 'devenv.exe' -ErrorAction SilentlyContinue |
