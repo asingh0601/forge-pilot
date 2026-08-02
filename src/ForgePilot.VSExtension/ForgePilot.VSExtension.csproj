@@ -185,11 +185,22 @@
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 
   <PropertyGroup>
-    <!-- Prefer the copy from the VS install (ships with the "Visual Studio
-         extension development" workload); fall back to the NuGet package's own
-         copy so a machine without the workload can still try. -->
-    <VsSDKTargetsPath Condition="'$(VsSDKTargetsPath)' == '' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK\Microsoft.VsSDK.targets')">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK\Microsoft.VsSDK.targets</VsSDKTargetsPath>
+    <!--
+      The NuGet package's targets are preferred over the ones in the VS install,
+      and the order matters.
+
+      Microsoft.VSSDK.BuildTools points VsSDKToolsPath at its OWN tools folder,
+      so VsixUtil.exe always comes from the package. The VS 18 install ships
+      v18 targets that invoke VsixUtil with -targetSdkVersion, which the
+      package's 17.14 VsixUtil does not accept — the build then dies with
+      "'-targetSdkVersion' is an invalid argument" and MSB6006 exit code -1.
+      Taking targets and tools from the same place keeps them in step.
+
+      The VS install copy remains as a fallback for a machine whose package
+      cache has been cleared.
+    -->
     <VsSDKTargetsPath Condition="'$(VsSDKTargetsPath)' == '' AND Exists('$(NuGetPackageRoot)microsoft.vssdk.buildtools\17.14.2120\tools\VSSDK\Microsoft.VsSDK.targets')">$(NuGetPackageRoot)microsoft.vssdk.buildtools\17.14.2120\tools\VSSDK\Microsoft.VsSDK.targets</VsSDKTargetsPath>
+    <VsSDKTargetsPath Condition="'$(VsSDKTargetsPath)' == '' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK\Microsoft.VsSDK.targets')">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK\Microsoft.VsSDK.targets</VsSDKTargetsPath>
   </PropertyGroup>
 
   <Import Project="$(VsSDKTargetsPath)" Condition="'$(VsSDKTargetsPath)' != ''" />
