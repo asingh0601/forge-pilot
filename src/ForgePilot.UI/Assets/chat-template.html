@@ -27,12 +27,26 @@
     --selection: #43413A;
     --code-bg: #1F1E1D;
 
+    /* Segoe UI Variable Text first: it carries proper optical sizing at body
+       scale, where plain Segoe UI looks noticeably coarser. */
     --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
     --font-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
 
+    /* One vertical rhythm, so nothing is spaced by eye. */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 18px;
+    --space-5: 26px;
+
     --radius-sm: 6px;
     --radius-md: 10px;
-    --radius-lg: 16px;
+    --radius-lg: 18px;
+
+    /* Negative tracking at body size; sans faces are cut a touch loose for
+       screen reading at 14–15px. */
+    --tracking-body: -0.003em;
+    --tracking-tight: -0.012em;
 }
 
 :root[data-theme="light"] {
@@ -62,12 +76,18 @@ html, body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: 14.5px;
+    /* Loose enough that dense prose doesn't set as a wall of text. */
+    line-height: 1.68;
+    letter-spacing: var(--tracking-body);
     height: 100%;
     word-wrap: break-word;
     overflow-wrap: break-word;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-variant-ligatures: contextual;
+    /* Tabular figures keep counts and token totals from shifting as they change. */
+    font-variant-numeric: tabular-nums;
 }
 
 ::selection { background: var(--selection); }
@@ -76,7 +96,8 @@ html, body {
     overflow-y: auto;
     overflow-x: hidden;
     height: 100%;
-    padding: 20px 0 28px;
+    padding: var(--space-5) 0 32px;
+    scroll-behavior: smooth;
 }
 
 /* Left-anchored content column. Capped for line-length readability, but NOT
@@ -88,15 +109,18 @@ html, body {
     position: relative;
     max-width: 860px;
     margin: 0;
-    padding: 0 22px 16px;
+    padding: 0 24px var(--space-4);
 }
 
-::-webkit-scrollbar { width: 10px; height: 10px; }
+/* Thin and low-contrast: the scrollbar is orientation, not chrome. */
+::-webkit-scrollbar { width: 11px; height: 11px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
     background: var(--border-strong);
-    border-radius: 5px;
-    border: 3px solid var(--bg);
+    border-radius: 6px;
+    border: 3.5px solid var(--bg);
+    background-clip: padding-box;
+    transition: background 0.15s ease;
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 ::-webkit-scrollbar-corner { background: transparent; }
@@ -107,11 +131,13 @@ html, body {
 .msg-user { display: flex; justify-content: flex-end; }
 .msg-user .bubble {
     background: var(--surface-subtle);
-    border: 1px solid var(--border);
+    /* No border: the fill alone separates it, and an outline at this size
+       reads as a control rather than something someone said. */
+    border: none;
     border-radius: var(--radius-lg);
-    border-bottom-right-radius: var(--radius-sm);
-    padding: 10px 16px;
-    max-width: 85%;
+    padding: 9px 15px;
+    max-width: 82%;
+    line-height: 1.6;
 }
 .msg-user .md-content > *:first-child { margin-top: 0; }
 .msg-user .md-content > *:last-child { margin-bottom: 0; }
@@ -140,7 +166,7 @@ html, body {
 .tool-group {
     max-width: 860px;
     margin: 0;
-    padding: 0 22px 16px;
+    padding: 0 24px var(--space-4);
 }
 .tool-group-header {
     display: inline-flex;
@@ -151,6 +177,7 @@ html, body {
     color: var(--faint);
     font-size: 13px;
     padding: 2px 0;
+    transition: color 0.12s ease;
 }
 .tool-group-header:hover { color: var(--muted); }
 .tool-group-chevron {
@@ -177,6 +204,9 @@ html, body {
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     overflow: hidden;
+    /* A hairline lift rather than a drop shadow — enough to separate the card
+       from the page without it appearing to float above the conversation. */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .tool-header {
     display: flex;
@@ -186,6 +216,7 @@ html, body {
     cursor: pointer;
     user-select: none;
     font-size: 13px;
+    transition: background 0.12s ease;
 }
 .tool-header:hover { background: var(--surface-subtle); }
 .tool-dot {
@@ -391,30 +422,38 @@ html, body {
 
 /* ── Markdown ───────────────────────────────────────────────────────────── */
 .md-content { min-width: 0; }
-.md-content h1 { font-size: 1.35em; font-weight: 600; margin: 1em 0 0.45em; }
-.md-content h2 { font-size: 1.2em;  font-weight: 600; margin: 0.95em 0 0.4em; }
-.md-content h3 { font-size: 1.08em; font-weight: 600; margin: 0.85em 0 0.35em; }
-.md-content h4, .md-content h5, .md-content h6 { font-size: 1em; font-weight: 600; margin: 0.8em 0 0.3em; }
-.md-content p { margin: 0.65em 0; }
+
+/* Headings are set tight and only modestly larger. In a chat panel a big
+   display scale fights the conversation instead of organising it. */
+.md-content h1 { font-size: 1.28em; font-weight: 650; letter-spacing: var(--tracking-tight); margin: 1.15em 0 0.4em; line-height: 1.3; }
+.md-content h2 { font-size: 1.14em; font-weight: 650; letter-spacing: var(--tracking-tight); margin: 1.05em 0 0.38em; line-height: 1.35; }
+.md-content h3 { font-size: 1.04em; font-weight: 650; letter-spacing: var(--tracking-tight); margin: 0.95em 0 0.34em; line-height: 1.4; }
+.md-content h4, .md-content h5, .md-content h6 { font-size: 1em; font-weight: 650; margin: 0.85em 0 0.3em; }
+.md-content > h1:first-child, .md-content > h2:first-child, .md-content > h3:first-child { margin-top: 0; }
+
+.md-content p { margin: 0.7em 0; }
 .md-content a { color: var(--accent); text-decoration: none; }
-.md-content a:hover { text-decoration: underline; }
-.md-content a.file-link { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
-.md-content strong { font-weight: 600; }
+.md-content a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.md-content a.file-link { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.md-content strong { font-weight: 650; }
 
 .md-content code {
     background: var(--surface-subtle);
-    border: 1px solid var(--border);
-    padding: 1px 5px;
+    /* Borderless: at inline scale a 1px outline muddies the glyphs. The tint
+       is enough to mark it as code. */
+    border: none;
+    padding: 1.5px 5px;
     border-radius: 4px;
     font-family: var(--font-mono);
-    font-size: 0.87em;
+    font-size: 0.855em;
+    font-variant-ligatures: none;
 }
 .md-content pre {
     background: var(--code-bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: 13px 15px;
-    margin: 0.8em 0;
+    padding: 14px 16px;
+    margin: 0.9em 0;
     overflow-x: auto;
 }
 .md-content pre code {
@@ -422,29 +461,47 @@ html, body {
     border: none;
     padding: 0;
     font-size: 12.5px;
-    line-height: 1.6;
+    line-height: 1.62;
+    letter-spacing: 0;
     color: var(--text);
 }
 .md-content blockquote {
     border-left: 2px solid var(--border-strong);
-    margin: 0.8em 0;
-    padding: 0.15em 0 0.15em 14px;
+    margin: 0.9em 0;
+    padding: 0.15em 0 0.15em 15px;
     color: var(--muted);
 }
-.md-content ul, .md-content ol { margin: 0.6em 0; padding-left: 1.5em; }
-.md-content li { margin: 0.25em 0; }
+.md-content ul, .md-content ol { margin: 0.7em 0; padding-left: 1.45em; }
+.md-content li { margin: 0.3em 0; padding-left: 0.15em; }
 .md-content li::marker { color: var(--faint); }
+/* Nested lists sit closer — the indent already signals the level. */
+.md-content li > ul, .md-content li > ol { margin: 0.3em 0; }
+
 .md-content table {
     border-collapse: collapse;
-    margin: 0.8em 0;
+    margin: 0.95em 0;
     width: 100%;
-    font-size: 13px;
-    border: 1px solid var(--border);
+    font-size: 13.5px;
+    /* Horizontal rules only. Full gridlines turn a small table into a form. */
+    border: none;
 }
-.md-content th, .md-content td { border-bottom: 1px solid var(--border); padding: 7px 11px; text-align: left; }
-.md-content th { background: var(--surface-subtle); font-weight: 600; }
+.md-content th, .md-content td {
+    border-bottom: 1px solid var(--border);
+    padding: 8px 12px 8px 0;
+    text-align: left;
+}
+.md-content th {
+    background: none;
+    font-weight: 650;
+    font-size: 12.5px;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom-color: var(--border-strong);
+}
 .md-content tr:last-child td { border-bottom: none; }
-.md-content hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+
+.md-content hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
 .md-content img { max-width: 100%; border-radius: var(--radius-sm); }
 .md-content > *:first-child { margin-top: 0; }
 .md-content > *:last-child { margin-bottom: 0; }
