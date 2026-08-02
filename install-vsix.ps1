@@ -92,9 +92,35 @@ if ($code -ne 0) {
 }
 
 if (-not $SkipConfigUpdate) {
+    # devenv /setup and /updateconfiguration write to machine-wide state and
+    # require elevation. Installing does not, so only this step is elevated:
+    # Start-Process -Verb RunAs raises a single UAC prompt rather than forcing
+    # the whole script to run as administrator.
+    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
+               ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
     Write-Host "Rebuilding extension and menu caches (this takes a minute or two)..."
-    Invoke-Native $devenv.FullName @('/setup') | Out-Null
-    Invoke-Native $devenv.FullName @('/updateconfiguration') | Out-Null
+    if (-not $isAdmin) { Write-Host "  Elevation required - approve the UAC prompt." }
+
+    foreach ($switch in @('/setup', '/updateconfiguration')) {
+        try {
+            if ($isAdmin) {
+                Invoke-Native $devenv.FullName @($switch) | Out-Null
+            }
+            else {
+                $proc = Start-Process -FilePath $devenv.FullName -ArgumentList $switch `
+                                      -Verb RunAs -Wait -PassThru -WindowStyle Hidden
+                if ($proc.ExitCode -ne 0) { Write-Warning "devenv $switch exited with $($proc.ExitCode)." }
+            }
+        }
+        catch {
+            Write-Warning "devenv $switch could not be run: $($_.Exception.Message)"
+            Write-Warning "Run these manually from an elevated prompt:"
+            Write-Warning "  `"$($devenv.FullName)`" /setup"
+            Write-Warning "  `"$($devenv.FullName)`" /updateconfiguration"
+            break
+        }
+    }
 }
 
 Write-Host "`nDone. Start Visual Studio, then View > Other Windows > Forge Pilot."
