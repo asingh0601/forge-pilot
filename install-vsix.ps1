@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Installs the Forge Pilot VSIX and forces Visual Studio to pick it up.
 
@@ -8,8 +8,8 @@
 
     That last step is the point of this script. On some Visual Studio 2026
     installs the shell does not consume the pending extension configuration
-    change on the next launch — the `extensions.configurationchanged` marker is
-    left in place and ExtensionMetadataCache.mpack is never rebuilt — so a
+    change on the next launch - the `extensions.configurationchanged` marker is
+    left in place and ExtensionMetadataCache.mpack is never rebuilt - so a
     newly installed extension contributes no menu commands and does not appear
     under Manage Extensions. `devenv /setup` and `/updateconfiguration` rebuild
     those caches explicitly.
@@ -39,7 +39,7 @@ if (-not $vsix) { throw "No .vsix found. Run build-vsix.ps1 first." }
 Write-Host ("Package : {0} ({1:N2} MB)" -f $vsix.FullName, ($vsix.Length / 1MB))
 
 if (Get-Process devenv -ErrorAction SilentlyContinue) {
-    throw "Visual Studio is running. Close every instance first — an install applied under a running IDE is not picked up, and the cache rebuild cannot run."
+    throw "Visual Studio is running. Close every instance first - an install applied under a running IDE is not picked up, and the cache rebuild cannot run."
 }
 
 $devenv = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio' -Recurse -Filter 'devenv.exe' -ErrorAction SilentlyContinue |

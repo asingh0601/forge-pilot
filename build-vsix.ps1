@@ -1,12 +1,12 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds the Forge Pilot VSIX.
 
 .DESCRIPTION
     Must use MSBuild from a Visual Studio install, NOT `dotnet build`.
 
-    The VSSDK targets that produce the package — CreateVsixContainer,
-    VSCTCompile, GeneratePkgDef — ship with the "Visual Studio extension
+    The VSSDK targets that produce the package - CreateVsixContainer,
+    VSCTCompile, GeneratePkgDef - ship with the "Visual Studio extension
     development" workload and only exist inside a VS installation. Under the
     .NET SDK the import is skipped, the assemblies still compile, and no .vsix
     is produced at all: a silent no-op that looks like success.
@@ -53,7 +53,7 @@ $vsix = Get-ChildItem (Join-Path $PSScriptRoot "src\ForgePilot.VSExtension\bin\$
     -Recurse -Filter '*.vsix' -ErrorAction SilentlyContinue | Select-Object -First 1
 
 if (-not $vsix) {
-    throw "Build succeeded but produced no .vsix. The VSSDK targets were most likely skipped — check that the 'Visual Studio extension development' workload is installed."
+    throw "Build succeeded but produced no .vsix. The VSSDK targets were most likely skipped - check that the 'Visual Studio extension development' workload is installed."
 }
 
 Write-Host ("`nVSIX : {0}" -f $vsix.FullName)
