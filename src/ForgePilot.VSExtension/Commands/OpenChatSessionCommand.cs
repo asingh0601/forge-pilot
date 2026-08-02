@@ -1,40 +1,44 @@
-using System;
-using System.ComponentModel.Design;
+﻿using Microsoft.VisualStudio.Extensibility;
+using Microsoft.VisualStudio.Extensibility.Commands;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 
 namespace ForgePilot.VSExtension.Commands;
 
-/// <summary>
-/// The View → Other Windows → Forge Pilot menu command.
-///
-/// A classic VSSDK <see cref="OleMenuCommand"/> placed by
-/// ForgePilotPackage.vsct. The VisualStudio.Extensibility command model was
-/// dropped along with its packaging: it forced
-/// <c>ExtensionType="VSSDK+VisualStudio.Extensibility"</c> into the manifest and
-/// shipped the new-model catalog files, and VS 2026 then registered the
-/// extension as Disabled so it never listed under Manage Extensions.
-///
-/// The GUID and id here must match guidForgePilotCmdSet / cmdidOpenChatSession
-/// in the .vsct — changing one means changing both.
-/// </summary>
-internal static class OpenChatSessionCommand
+[VisualStudioContribution]
+public class OpenChatSessionCommand : Command
 {
-    public static readonly Guid CommandSet = new("7b3f1a52-9d84-4c07-b6ae-1f2c5d90a743");
-
-    public const int CommandId = 0x0100;
-
-    public static void Register(OleMenuCommandService commandService)
+    public OpenChatSessionCommand(VisualStudioExtensibility extensibility)
+        : base(extensibility)
     {
-        ThreadHelper.ThrowIfNotOnUIThread();
-
-        var id = new CommandID(CommandSet, CommandId);
-        commandService.AddCommand(new OleMenuCommand(Execute, id));
     }
 
-    private static void Execute(object sender, EventArgs e)
+    public override CommandConfiguration CommandConfiguration => new("Forge Pilot")
     {
-        // No force-load needed: the package owns the command service this was
-        // registered on, so it is loaded by the time this runs.
-        _ = ForgePilotPackage.ShowChatSessionWindowAsync();
+        Placements = [CommandPlacement.KnownPlacements.ViewOtherWindowsMenu],
+        Icon = new(ImageMoniker.KnownValues.WindowsForm, IconSettings.IconAndText),
+    };
+
+    public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+        // Force-load the VSSDK package on first invocation — the command runs
+        // in the Extensibility host, which does not load it for us.
+        //
+        // This GUID must match [Guid] on ForgePilotPackage. It is the fork's
+        // own, not upstream's: sharing upstream's meant both extensions
+        // registered the same VSPackage and neither loaded.
+        if (!ForgePilotPackage.IsLoaded)
+        {
+            var shell = (IVsShell)ServiceProvider.GlobalProvider.GetService(typeof(SVsShell));
+            if (shell != null)
+            {
+                var guid = new System.Guid("d7a41f38-2c96-4e5b-8b31-9f60c2ae4d17");
+                shell.LoadPackage(ref guid, out _);
+            }
+        }
+
+        await ForgePilotPackage.ShowChatSessionWindowAsync();
     }
 }

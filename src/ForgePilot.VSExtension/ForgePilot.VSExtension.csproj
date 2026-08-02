@@ -1,16 +1,4 @@
-<!--
-  The SDK is imported explicitly rather than via Sdk="Microsoft.NET.Sdk" on the
-  Project element. That attribute injects Sdk.targets at the very END of the
-  file, which would place it AFTER the VSSDK import at the bottom — and the
-  VSSDK targets read $(TargetPath) at import time to decide which assembly to
-  generate the pkgdef from. Imported too early it sees an empty value and
-  GeneratePkgDef fails with VSSDK1032 "No item to process for CreatePkgDef".
-  Spelling both imports out lets the VSSDK targets come last, after TargetPath
-  exists.
--->
-<Project>
-
-  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
@@ -19,27 +7,8 @@
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
 
-    <!--
-      A plain VSSDK extension: no ExtensionType, and none of the
-      .vsextension/extension.json, catalog.json or manifest.json artefacts the
-      VisualStudio.Extensibility packaging used to ship. Those were what made
-      VS 2026 register the extension as Disabled ("Missing entry in per-user
-      enabled extensions cache") so it never appeared under Manage Extensions
-      without devenv /setup + /updateconfiguration.
-
-      BUILD WITH MSBUILD FROM A VISUAL STUDIO INSTALL, not `dotnet build`. The
-      VSSDK targets ship with the "Visual Studio extension development"
-      workload; the import at the bottom of this file is Exists()-guarded, so
-      under the .NET SDK the assemblies still compile but no .vsix is produced.
-    -->
+    <VssdkCompatibleExtension>true</VssdkCompatibleExtension>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
-    <CreateVsixContainer>true</CreateVsixContainer>
-    <DeployExtension>false</DeployExtension>
-
-    <!-- GenerateTemplatesManifest runs unconditionally and fails with VSSDK1202
-         when this is unset. Only relevant to extensions shipping project or
-         item templates, which this one does not. -->
-    <TemplateOutputDirectory>$(IntermediateOutputPath)Templates\</TemplateOutputDirectory>
 
     <IncludeAssemblyInVSIXContainer>true</IncludeAssemblyInVSIXContainer>
     <IncludeDebugSymbolsInVSIXContainer>false</IncludeDebugSymbolsInVSIXContainer>
@@ -55,13 +24,11 @@
 
   <ItemGroup>
     <Reference Include="System.Net.Http" />
-    <!-- OleMenuCommandService derives from System.ComponentModel.Design
-         .MenuCommandService, which lives in System.Design. Without this the
-         AddCommand call fails to bind even though the type resolves. -->
-    <Reference Include="System.Design" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2120">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -127,26 +94,19 @@
   <ItemGroup>
     <None Include="source.extension.vsixmanifest" SubType="Designer" />
 
-    <!-- Referenced by <License> in the manifest, so it has to be inside the
+    <!-- Referenced by <License> in the manifest, so it must be inside the
          package: a referenced-but-absent file fails validation at install. -->
     <Content Include="LICENSE.txt">
       <IncludeInVSIX>true</IncludeInVSIX>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-  </ItemGroup>
 
-  <!-- Command table. VSCTCompile compiles the .vsct into the binary resource
-       that [ProvideMenuResource("Menus.ctmenu", 1)] on the package points at;
-       ResourceName must match that name exactly. -->
-  <ItemGroup>
-    <VSCTCompile Include="ForgePilotPackage.vsct">
-      <ResourceName>Menus.ctmenu</ResourceName>
-      <SubType>Designer</SubType>
-    </VSCTCompile>
-    <Content Include="Resources\command-icon.png">
-      <IncludeInVSIX>true</IncludeInVSIX>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <!-- Kept but NOT compiled. VSCTCompile needs VSSDK targets that only run
+         with the extension development workload, and even then the menu it
+         produces depends on a cache rebuild that this VS install never
+         performs — which is exactly how the View menu entry went missing. The
+         menu comes from Commands/OpenChatSessionCommand instead. -->
+    <None Include="ForgePilotPackage.vsct" />
   </ItemGroup>
 
   <!--
@@ -165,65 +125,6 @@
       <IncludeInVSIX>true</IncludeInVSIX>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-  </ItemGroup>
-
-  <!--
-    Import order below is the whole reason this file spells its SDK imports out
-    rather than using Sdk="Microsoft.NET.Sdk" on the Project element.
-
-    Sdk.targets must land FIRST so $(TargetPath) and the other common build
-    properties exist. The VSSDK targets — which produce the .vsix via
-    CreateVsixContainer, VSCTCompile and GeneratePkgDef — read those at import
-    time. With the attribute form, Sdk.targets is injected at the very end and
-    the VSSDK import sees an empty $(TargetPath), so GeneratePkgDef fails with
-    VSSDK1032 "No item to process for CreatePkgDef".
-
-    Microsoft.VSSDK.BuildTools does not import them for us — its targets file
-    only sets a few VsSDK* environment variables. A legacy .csproj got the
-    import from its ProjectTypeGuids; SDK-style projects have no equivalent.
-  -->
-  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
-
-  <PropertyGroup>
-    <!--
-      The NuGet package's targets are preferred over the ones in the VS install,
-      and the order matters.
-
-      Microsoft.VSSDK.BuildTools points VsSDKToolsPath at its OWN tools folder,
-      so VsixUtil.exe always comes from the package. The VS 18 install ships
-      v18 targets that invoke VsixUtil with -targetSdkVersion, which the
-      package's 17.14 VsixUtil does not accept — the build then dies with
-      "'-targetSdkVersion' is an invalid argument" and MSB6006 exit code -1.
-      Taking targets and tools from the same place keeps them in step.
-
-      The VS install copy remains as a fallback for a machine whose package
-      cache has been cleared.
-    -->
-    <VsSDKTargetsPath Condition="'$(VsSDKTargetsPath)' == '' AND Exists('$(NuGetPackageRoot)microsoft.vssdk.buildtools\17.14.2120\tools\VSSDK\Microsoft.VsSDK.targets')">$(NuGetPackageRoot)microsoft.vssdk.buildtools\17.14.2120\tools\VSSDK\Microsoft.VsSDK.targets</VsSDKTargetsPath>
-    <VsSDKTargetsPath Condition="'$(VsSDKTargetsPath)' == '' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK\Microsoft.VsSDK.targets')">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK\Microsoft.VsSDK.targets</VsSDKTargetsPath>
-  </PropertyGroup>
-
-  <Import Project="$(VsSDKTargetsPath)" Condition="'$(VsSDKTargetsPath)' != ''" />
-
-  <!--
-    CreatePkgDef reflects over the built assembly to find its registration
-    attributes, so every assembly it references must be resolvable. Ours are
-    not: the VS-provided assemblies are deliberately ExcludeAssets="runtime"
-    (see the note above and AssemblyResolveBootstrap.cs) so they never land in
-    the output folder, and CreatePkgDef then fails with FileNotFoundException on
-    Microsoft.VisualStudio.Shell.Framework.
-
-    Pointing it at the VS install's own assembly folders resolves them without
-    shipping anything extra — GeneratePkgDef appends to this item rather than
-    replacing it, so seeding it here is enough.
-  -->
-  <PropertyGroup>
-    <VsIdeDir Condition="'$(VsIdeDir)' == ''">$(MSBuildExtensionsPath32)\..\Common7\IDE\</VsIdeDir>
-  </PropertyGroup>
-
-  <ItemGroup Condition="Exists('$(VsIdeDir)PublicAssemblies')">
-    <CreatePkgDefReferencedAssemblies Include="$(VsIdeDir)PublicAssemblies\*.dll" />
-    <CreatePkgDefReferencedAssemblies Include="$(VsIdeDir)PrivateAssemblies\*.dll" Condition="Exists('$(VsIdeDir)PrivateAssemblies')" />
   </ItemGroup>
 
 </Project>
