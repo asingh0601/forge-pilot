@@ -49,9 +49,19 @@ Building the VSIX needs **Visual Studio with the "Visual Studio extension develo
 pwsh build-vsix.ps1
 ```
 
-The package lands at `src/ForgePilot.VSExtension/bin/Release/net472/ForgePilot.VSExtension.vsix`. Double-click it, then restart Visual Studio.
+Then install it, with Visual Studio closed:
 
-> `dotnet build` compiles every assembly but produces **no .vsix** — the VSSDK import is skipped and the build still reports success. Use the script, which fails loudly instead. The other projects (`ForgePilot.Desktop`, `ForgePilot.Console`) build fine under `dotnet build`.
+```
+pwsh install-vsix.ps1
+```
+
+That uninstalls any previous copy, installs the new package, and rebuilds Visual Studio's extension and menu caches.
+
+Open it from **View → Other Windows → Forge Pilot**.
+
+> **Why the install script rebuilds caches.** On some Visual Studio 2026 installs the shell does not consume the pending extension configuration change on the next launch: `extensions.configurationchanged` is left in place and `ExtensionMetadataCache.mpack` is never rebuilt, so a newly installed extension contributes no menu commands and does not appear under Manage Extensions. `devenv /setup` and `/updateconfiguration` force the rebuild. This is a host-side quirk rather than something the package controls — the VSIX registers its package, menus and options pages through an ordinary pkgdef, and upstream VsAgentic shows the same behaviour on the same machine.
+
+> **`dotnet build` will not produce a .vsix.** It compiles every assembly and reports success, but the VSSDK import is skipped. Use `build-vsix.ps1`, which fails loudly instead. The other projects (`ForgePilot.Desktop`, `ForgePilot.Console`) build fine under `dotnet build`.
 
 To develop against it, open `src/ForgePilot.slnx` in Visual Studio 2026 with the **Visual Studio extension development** workload, set `ForgePilot.VSExtension` as the startup project, and press **F5** — that launches the VS experimental instance.
 
