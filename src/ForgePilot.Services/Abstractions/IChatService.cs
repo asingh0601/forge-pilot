@@ -47,6 +47,25 @@ public interface IChatService
     /// </summary>
     long? GetSessionTokens();
 
+
+    /// <summary>
+    /// The model the CLI reported on its last <c>init</c> event, or null before
+    /// the first turn.
+    ///
+    /// This is the only reliable answer to "which model is running". When no
+    /// model is pinned the <c>--model</c> flag is omitted and the CLI falls back
+    /// to the account default, which cannot be inferred from settings — and
+    /// asking the model itself does not work, since models routinely
+    /// misidentify themselves.
+    /// </summary>
+    string? ActiveModel { get; }
+
+    /// <summary>
+    /// Raised when the CLI reports a different model than before, so the UI can
+    /// correct a label it could only guess at until now.
+    /// </summary>
+    event Action<string>? ModelReported;
+
     /// <summary>
     /// Raised when the underlying CLI returned an authentication / login-required
     /// error. The string argument is the original error text from the CLI so the

@@ -14,6 +14,15 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .CreateLogger();
 
+// Completion harness: measures the inline-completion round trip without
+// Visual Studio in the way. Latency is the property that decides whether
+// completions are usable at all, and it cannot be measured from inside the
+// editor without the debounce and cache confusing the numbers.
+if (args.Length > 0 && args[0].Equals("--complete", StringComparison.OrdinalIgnoreCase))
+{
+    return await CompletionHarness.RunAsync(args.Skip(1).ToArray());
+}
+
 try
 {
     var workingDir = args.Length > 0 ? args[0] : Environment.CurrentDirectory;

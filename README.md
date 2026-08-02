@@ -19,8 +19,33 @@
 - **Rounded composer** — a single input card with a circular accent send button that turns into a stop button while Claude is working, plus one status line (`Working… (12s · esc to interrupt)`) that replaces the old separate "Thinking…" strip.
 - **Structured tool cards** — tool calls collapse into a card showing a status dot, the tool name and its argument (`Read  src/Foo.cs`), expanding to the result. This is the one deliberate departure from a pure chat UI: a coding assistant produces tool output that a chat app has no equivalent for.
 - **Diff and todo rendering** — edits show tinted `+`/`−` rows with line-number gutters; `TodoWrite` renders as a `☐` / `◐` / `☑` checklist rather than raw markdown checkboxes.
+- **Session controls in the composer** — model, thinking budget and permission mode are chips under the input rather than settings buried in a dialog. Each change restarts the CLI child process (all three are launch-time properties of it) but resumes the same conversation, so nothing is lost.
+- **Permission mode menu** — Manual, Accept edits, Plan, Auto, Bypass permissions, matching the CLI's own set. Bypass is spelled out and has no digit shortcut on purpose: it grants unprompted shell access.
+- **Slash commands** — a `/` picker that lists the workspace's own commands alongside the built-ins, with the typed command styled so it reads as a command rather than as the first word of a message.
+- **`/usage` as meters** — the CLI's quota report renders as labelled bars that tint amber past 70% and red past 90%, with the trailing detail kept below.
+- **Context size in the composer** — the conversation's token size, updated per turn.
 
 Everything else — how sessions work, how the CLI is driven, how permissions are brokered — is unchanged from upstream.
+
+### Slash commands
+
+The `/` picker offers three:
+
+| Command | Handled by | What it does |
+|---|---|---|
+| `/clear` | ForgePilot | Empties the transcript and the CLI's history |
+| `/usage` | Claude Code | Subscription limits, rendered as meters |
+| `/compact` | Claude Code | Summarises earlier turns to free up context |
+
+`/clear` is the only one intercepted, because it is the only one that has to touch the window as well as the conversation.
+
+Anything else you type is forwarded to Claude Code, so the CLI's other built-ins still work even though they are not listed — `/context` and `/model` both answer normally. Project and personal commands from `.claude/commands` work too, and the ⚡ menu lists the ones available in the current workspace. A few are specific to the CLI's interactive terminal and report themselves as unavailable here (`/status`, `/help`).
+
+### Inline completions (optional, off by default)
+
+Editor ghost text, generated through the same subscription login the chat uses — no API key, nothing billed per request. Enable it in the session menu or **Tools → Options → Forge Pilot → Inline completions**.
+
+**This is explicit-invoke only, and that is a deliberate limit rather than an oversight.** Measured on a normal machine, a one-shot `claude -p` costs 7.5–11s end to end, and a trivial prompt costs almost as much as a real one — the overhead is per-invocation CLI setup, not generation, so prompt trimming does not touch it. Keeping a process warm brings it to roughly **2.7–11s**, still far past the window in which a suggestion is useful while typing. Copilot-style automatic ghost text is not achievable on subscription auth; the completion path therefore never fires on a keystroke.
 
 ### Claude Code assets
 
@@ -43,23 +68,25 @@ This layer is read-only by design. The CLI owns these features outright — it r
 
 ForgePilot has no Marketplace listing — build and install it yourself.
 
-Building the VSIX needs **Visual Studio with the "Visual Studio extension development" workload**, because the VSSDK targets that produce the package ship with it:
+Building the VSIX needs **Visual Studio with the "Visual Studio extension development" workload**, because the VSSDK targets that produce the package ship with it. Build with MSBuild from that install (not `dotnet build` — see below):
 
 ```
-pwsh build-vsix.ps1
+"C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" src\ForgePilot.slnx -t:Rebuild -p:Configuration=Release
 ```
 
-Then install it, with Visual Studio closed:
+The package lands at:
 
 ```
-pwsh install-vsix.ps1
+src\ForgePilot.VSExtension\bin\Release\net472\ForgePilot.VSExtension.vsix
 ```
 
-That uninstalls any previous copy, installs the new package, and rebuilds Visual Studio's extension and menu caches.
+Close Visual Studio and double-click it to install.
 
-Open it from **View → Other Windows → Forge Pilot**.
+Open it from **View → Other Windows → Forge Pilot**. On first install it also opens itself once, docked beside Solution Explorer, so you don't have to find the menu.
 
-> **Why the install script rebuilds caches.** On some Visual Studio 2026 installs the shell does not consume the pending extension configuration change on the next launch: `extensions.configurationchanged` is left in place and `ExtensionMetadataCache.mpack` is never rebuilt, so a newly installed extension contributes no menu commands and does not appear under Manage Extensions. `devenv /setup` and `/updateconfiguration` force the rebuild. This is a host-side quirk rather than something the package controls — the VSIX registers its package, menus and options pages through an ordinary pkgdef, and upstream VsAgentic shows the same behaviour on the same machine.
+> **Bump the version when reinstalling.** `Version` in `source.extension.vsixmanifest` gates whether an install replaces an existing copy. Rebuilding without changing it produces a package Visual Studio may decline to install over the old one, and you end up testing a stale build while assuming otherwise. Check **Extensions → Installed** to confirm which version is live.
+
+> **If the extension installs but never appears.** On some Visual Studio 2026 installs the shell does not consume the pending extension configuration change on the next launch: `extensions.configurationchanged` is left in place and `ExtensionMetadataCache.mpack` is never rebuilt, so a newly installed extension contributes no menu commands and does not show under Manage Extensions. Running `devenv /setup` and `devenv /updateconfiguration` from an elevated prompt forces the rebuild. This is a host-side quirk rather than something the package controls — the VSIX registers its package, menus and options pages through an ordinary pkgdef, and upstream VsAgentic behaves identically on the same machine. Extensions installed from the Marketplace are unaffected.
 
 > **`dotnet build` will not produce a .vsix.** It compiles every assembly and reports success, but the VSSDK import is skipped. Use `build-vsix.ps1`, which fails loudly instead. The other projects (`ForgePilot.Desktop`, `ForgePilot.Console`) build fine under `dotnet build`.
 
@@ -142,6 +169,10 @@ Both hosts share everything visual: `ForgePilot.UI` owns the WebView2 transcript
 
 - **Visual Studio 2026 (17.14+)** only — VS Code and Rider are not supported.
 - **x64 Windows** only.
+- **Inline completions are explicit-invoke, not automatic.** A CLI round trip is 2.7–11s even with the process kept warm; see [Inline completions](#inline-completions-optional-off-by-default).
+- **Subscription limits are only visible through `/usage`.** They come from an endpoint the CLI calls directly and are not carried on the print-mode event stream, so the composer shows context size rather than quota.
+- **`/model` reads reliably but does not update the chips.** The model chip is driven by the CLI's `init` event, which a mid-session `/model` change does not re-emit — use the chip to change models.
+- **A few CLI built-ins are unavailable in print mode** (`/status`, the CLI's own `/help`). They report this themselves when run.
 
 ---
 

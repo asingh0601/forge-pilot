@@ -192,7 +192,11 @@ public sealed class ClaudeCliProcessHost : IDisposable
             CliPermissionMode.BypassPermissions => "bypassPermissions",
             CliPermissionMode.AcceptEdits => "acceptEdits",
             CliPermissionMode.Plan => "plan",
-            _ => "default",
+            CliPermissionMode.Auto => "auto",
+            // "manual" is the current name; "default" remains accepted as an
+            // alias, but naming the mode we actually mean survives the alias
+            // being dropped.
+            _ => "manual",
         };
         sb.Append(" --permission-mode ");
         sb.Append(permFlag);

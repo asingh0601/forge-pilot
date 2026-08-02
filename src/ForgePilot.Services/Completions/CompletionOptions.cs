@@ -3,36 +3,30 @@ namespace ForgePilot.Services.Completions;
 /// <summary>
 /// Settings for inline editor completions.
 ///
-/// Separate from <c>ForgePilotOptions</c> because the two features have
-/// nothing in common at runtime: chat authenticates through the CLI's
-/// subscription login, completions through an API key, and they bill
-/// differently.
+/// Separate from <c>ForgePilotOptions</c> because the two run different CLI
+/// processes with different arguments: the chat's process carries the user's
+/// conversation, tools and permission mode, while the completion process is
+/// tool-free, stateless in intent, and pinned to a fast model.
 /// </summary>
 public class CompletionOptions
 {
     /// <summary>
-    /// Off unless explicitly enabled AND a key is present. Completions are
-    /// billed per request against the Anthropic API and are not covered by the
-    /// Claude subscription the chat uses, so this must never switch itself on.
+    /// Off unless explicitly enabled. Completions spawn a second CLI process
+    /// and consume subscription usage, so this must never switch itself on.
     /// </summary>
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Haiku by default: inline completion is a latency problem before it is a
-    /// quality one, and a slow suggestion is worse than none because the user
-    /// has already typed past it.
+    /// A CLI model alias (haiku, sonnet, opus) or a full model id. Haiku by
+    /// default: inline completion is a latency problem before it is a quality
+    /// one, and a slow suggestion is worse than none because the user has
+    /// already typed past it.
     /// </summary>
-    public string Model { get; set; } = "claude-haiku-4-5-20251001";
-
-    /// <summary>
-    /// Enough for a statement or a short block. Raising it mostly buys longer
-    /// waits for suggestions that get dismissed.
-    /// </summary>
-    public int MaxTokens { get; set; } = 128;
+    public string Model { get; set; } = "haiku";
 
     /// <summary>
     /// Idle time before a request is issued. Without a debounce the request
-    /// rate — and the bill — scales with typing speed.
+    /// rate scales with typing speed.
     /// </summary>
     public int DebounceMilliseconds { get; set; } = 300;
 

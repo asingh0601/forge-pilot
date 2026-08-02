@@ -38,5 +38,16 @@ public enum CliPermissionMode
     /// top: it changes how the agent behaves, so nothing gated reaches the
     /// permission helper in the first place.
     /// </summary>
-    Plan
+    Plan,
+
+    /// <summary>
+    /// The CLI decides per call whether to ask, using its own classifier:
+    /// reads and other low-risk tools run unprompted, riskier ones still raise
+    /// a banner. Maps to <c>--permission-mode auto</c>.
+    ///
+    /// Sits between <see cref="Default"/> and <see cref="AcceptEdits"/> — fewer
+    /// interruptions than prompting for everything, without the blanket
+    /// write-access that auto-accepting edits grants.
+    /// </summary>
+    Auto
 }

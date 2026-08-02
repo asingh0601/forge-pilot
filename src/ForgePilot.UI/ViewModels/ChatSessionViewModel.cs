@@ -76,6 +76,30 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _statusLine = "";
 
+    /// <summary>
+    /// Session totals — "4.3k tokens · $0.0123" — shown on their own line below
+    /// the status. Empty until the first turn completes.
+    /// </summary>
+    [ObservableProperty]
+    private string _usageLine = "";
+
+    /// <summary>
+    /// Verb for the status line while a named command runs ("Compacting"), or
+    /// null for an ordinary turn. Cleared when the turn ends.
+    /// </summary>
+    private string? _runningCommandVerb;
+
+    /// <summary>
+    /// Commands worth narrating: they take time and print little or nothing, so
+    /// without this the panel looks idle while they work and unchanged when they
+    /// finish. Value is (status verb, confirmation shown on success).
+    /// </summary>
+    private static readonly Dictionary<string, (string Verb, string Done)> NarratedCommands =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["/compact"] = ("Compacting", "Conversation compacted — earlier turns are now a summary."),
+        };
+
     public SessionActivity Activity =>
         _pendingUserPrompts > 0 ? SessionActivity.AwaitingUser :
         IsBusy ? SessionActivity.Busy :
@@ -109,12 +133,12 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
                     : 0;
                 ActivityGlyph = SpinnerFrames[_spinnerFrame].ToString();
 
-                // Tokens only arrive on the CLI's result event, so during the
-                // first turn there is nothing to show — omit the segment rather
-                // than display a misleading zero.
-                var tokens = _chatService?.GetSessionTokens();
-                var usage = tokens.HasValue ? $" · {FormatTokens(tokens.Value)} tokens" : "";
-                StatusLine = $"Working… ({FormatElapsed(elapsed)}{usage} · esc to interrupt)";
+                // Name the operation when it is a command rather than a
+                // conversation turn: /compact can run for a while and prints
+                // nothing when it lands, so "Working…" leaves no way to tell a
+                // slow compaction from a stalled one.
+                var verb = _runningCommandVerb ?? "Working";
+                StatusLine = $"{verb}… ({FormatElapsed(elapsed)} · esc to interrupt)";
                 break;
 
             case SessionActivity.AwaitingUser:
@@ -127,6 +151,34 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
                 StatusLine = "";
                 break;
         }
+
+        UpdateUsageLine();
+    }
+
+    /// <summary>
+    /// Session totals, kept on their own line rather than inside the working
+    /// message.
+    ///
+    /// The two change on completely different rhythms: the elapsed timer ticks
+    /// eight times a second, while usage only moves when a turn completes.
+    /// Sharing a line made the token count jitter sideways on every frame as
+    /// the elapsed text grew and shrank, and it vanished entirely the moment
+    /// the turn finished — which is exactly when it is worth reading.
+    /// </summary>
+    private void UpdateUsageLine()
+    {
+        // Tokens and cost only arrive on the CLI's result event, so during the
+        // first turn there is nothing to show — stay empty rather than display
+        // a misleading zero.
+        // Tokens only. Cost belongs in /usage, where there is room to say what
+        // it covers; on one line beside the composer it reads as a running
+        // charge, which it is not on a subscription.
+        var tokens = _chatService?.GetSessionTokens();
+
+        // "context", not "tokens": this is the size of the conversation as of the
+        // last turn, not a running total of everything ever sent. Labelling a
+        // size as a total is what made 168k look plausible.
+        UsageLine = tokens.HasValue ? $"{FormatTokens(tokens.Value)} context" : "";
     }
 
     // ── Session settings (model / effort / mode) ───────────────────────────
@@ -152,6 +204,10 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
     /// </summary>
     public static readonly (string Label, string Value)[] Models =
     {
+        // Empty value omits --model, leaving the CLI on the account default.
+        // Offered so a session can be handed back to that default once a model
+        // has been pinned — otherwise the choice is one-way.
+        ("Default", ""),
         ("Opus 5", "claude-opus-5"),
         ("Sonnet 5", "claude-sonnet-5"),
         ("Haiku 4.5", "claude-haiku-4-5-20251001"),
@@ -197,39 +253,60 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
         var s = _chatService?.GetSettings();
         if (s is null) return;
 
-        // An empty model means nothing was pinned, which the chip reports as the
-        // default it will actually run under rather than as a blank.
-        var effectiveModel = string.IsNullOrWhiteSpace(s.Model) ? DefaultModel : s.Model;
+        // When nothing is pinned the --model flag is omitted and the CLI runs the
+        // account default, which may be any model. Reporting our own preferred
+        // default here was a lie the user could see through: the chip said
+        // "Sonnet 5" while the CLI answered as Haiku.
+        //
+        // Prefer the pinned model; otherwise use whatever the CLI reported on
+        // its init event; and until that arrives say "Default" rather than name
+        // a model we have not verified is running.
+        var effectiveModel = string.IsNullOrWhiteSpace(s.Model)
+            ? _chatService?.ActiveModel
+            : s.Model;
 
-        ModelLabel = Models.FirstOrDefault(m =>
-            string.Equals(m.Value, effectiveModel, StringComparison.OrdinalIgnoreCase)).Label
-            // A model set by hand in Options won't match a preset; show it verbatim.
-            ?? effectiveModel;
+        ModelLabel = string.IsNullOrWhiteSpace(effectiveModel)
+            ? "Default"
+            : Models.FirstOrDefault(m =>
+                  string.Equals(m.Value, effectiveModel, StringComparison.OrdinalIgnoreCase)).Label
+              // A model set by hand in Options, or one newer than this build
+              // knows about, won't match a preset; show it verbatim.
+              ?? effectiveModel!;
 
         EffortLabel = EffortLevels.FirstOrDefault(e => e.Tokens == s.MaxThinkingTokens).Label
             ?? $"{s.MaxThinkingTokens / 1000}k";
 
         IsPlanMode = s.PermissionMode == CliPermissionMode.Plan;
-        ModeLabel = s.PermissionMode switch
-        {
-            CliPermissionMode.Plan => "Plan",
-            CliPermissionMode.AcceptEdits => "Auto-edit",
-            CliPermissionMode.BypassPermissions => "Bypass",
-            _ => "Act"
-        };
+        ModeLabel = LabelFor(s.PermissionMode);
     }
 
-    /// <summary>Flips between plan and act, leaving the other settings alone.</summary>
-    public string? TogglePlanMode()
+    /// <summary>
+    /// The permission modes offered in the mode menu, in the CLI's own order and
+    /// wording so the two read the same.
+    ///
+    /// <see cref="CliPermissionMode.BypassPermissions"/> is last and deliberately
+    /// unabbreviated: it hands the agent unprompted shell access, and a menu row
+    /// reading "Bypass" understates that.
+    /// </summary>
+    public static readonly (string Label, CliPermissionMode Mode)[] PermissionModes =
+    {
+        ("Manual", CliPermissionMode.Default),
+        ("Accept edits", CliPermissionMode.AcceptEdits),
+        ("Plan", CliPermissionMode.Plan),
+        ("Auto", CliPermissionMode.Auto),
+        ("Bypass permissions", CliPermissionMode.BypassPermissions),
+    };
+
+    private static string LabelFor(CliPermissionMode mode) =>
+        PermissionModes.FirstOrDefault(m => m.Mode == mode).Label ?? "Manual";
+
+    /// <summary>Switches permission mode, leaving the other settings alone.</summary>
+    public string? SetPermissionMode(CliPermissionMode mode)
     {
         var s = _chatService?.GetSettings();
         if (s is null) return null;
 
-        var next = s.PermissionMode == CliPermissionMode.Plan
-            ? CliPermissionMode.Default
-            : CliPermissionMode.Plan;
-
-        return ApplySessionSettings(s with { PermissionMode = next });
+        return ApplySessionSettings(s with { PermissionMode = mode });
     }
 
     /// <summary>"45s" under a minute, "1m 29s" beyond it.</summary>
@@ -332,6 +409,10 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
             _questionBroker.QuestionRequested += OnQuestionBrokerRequested;
 
         chatService.LoginRequired += OnChatServiceLoginRequired;
+
+        // The chip can only guess at the model until the CLI says which one it
+        // resolved; correct it as soon as it does.
+        chatService.ModelReported += _ => Dispatch(RefreshSettingLabels);
     }
 
     private void OnChatServiceLoginRequired(string? errorMessage)
@@ -341,6 +422,11 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
             ActiveBanner = new LoginBannerViewModel(errorMessage, () =>
             {
                 ActiveBanner = null;
+
+                // The CLI opens the browser for OAuth and writes the credentials
+                // to its own store, then the current process is stopped — so the
+                // next message starts a fresh one that picks them up. Nothing
+                // needs to be handed back here.
                 _chatService?.LaunchLogin();
             });
         });
@@ -508,15 +594,12 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
     private bool CanSend() => !IsBusy && !string.IsNullOrWhiteSpace(InputText);
 
     /// <summary>
-    /// Handles the slash commands that the CLI only implements in its
-    /// interactive REPL.
+    /// Intercepts the one slash command that addresses the window rather than
+    /// the conversation.
     ///
-    /// The chat runs the CLI with <c>-p --input-format stream-json</c>, where
-    /// there is no REPL to parse them: <c>/usage</c>, <c>/cost</c> and friends
-    /// are passed through as ordinary text and the model just sees a message
-    /// starting with a slash. Custom project commands
-    /// (<c>.claude/commands/*.md</c>) <em>are</em> expanded by the CLI, so they
-    /// must still be forwarded — only this fixed set is intercepted.
+    /// Everything else — the CLI's built-ins and any project command from
+    /// <c>.claude/commands</c> — is forwarded to Claude Code, which answers them
+    /// in print mode.
     /// </summary>
     /// <returns>True when the command was handled locally and must not be sent.</returns>
     private bool TryHandleLocalCommand(string message)
@@ -531,43 +614,18 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
                 ClearCommand.Execute(null);
                 return true;
 
-            case "cost":
-            case "usage":
-            {
-                var cost = _chatService?.GetSessionCost();
-                var tokens = _chatService?.GetSessionTokens();
-
-                string body;
-                if (!cost.HasValue && !tokens.HasValue)
-                {
-                    body = "Nothing reported yet — the CLI reports usage once a turn completes.";
-                }
-                else
-                {
-                    var parts = new List<string>();
-                    if (tokens.HasValue) parts.Add($"**Tokens:** {tokens.Value:N0}");
-                    if (cost.HasValue) parts.Add($"**Cost:** ${cost.Value:F4}");
-                    body = string.Join("  ·  ", parts);
-                }
-
-                EmitLocalMessage(
-                    $"{body}\n\n_This session only, including cache reads and writes. `/usage` in the terminal " +
-                    "reports subscription-wide limits, which the print-mode transport this window uses does not " +
-                    "expose._");
-                return true;
-            }
-
-            case "help":
-                EmitLocalMessage(
-                    "**Handled here:** `/clear`, `/cost`, `/usage`, `/help`\n\n" +
-                    "Project and personal commands from `.claude/commands` are passed to the CLI and work " +
-                    "normally — the ⚡ menu lists the ones available in this workspace.\n\n" +
-                    "Other built-in commands (`/login`, `/model`, `/doctor`, …) belong to the CLI's " +
-                    "interactive terminal and have no effect here; run them in a shell with `claude`.");
-                return true;
+            // /clear is the only command handled here, because it is the only
+            // one that has to touch the window: it empties the transcript as
+            // well as the CLI's history, and the CLI's own version cannot reach
+            // the UI.
+            //
+            // Everything else is forwarded. The CLI answers its built-ins in
+            // print mode, and it answers them better than this extension can —
+            // /usage reports real subscription limits, which are not derivable
+            // from the event stream at all. Intercepting them here only shadowed
+            // the real answers with worse local guesses.
 
             default:
-                // A custom command, or one this build doesn't know — let the CLI decide.
                 return false;
         }
     }
@@ -669,15 +727,28 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
             });
         }
 
+        // Narrate slow, quiet commands. Set before IsBusy so the very first
+        // status tick already carries the right verb.
+        NarratedCommands.TryGetValue(message.Trim(), out var narration);
+        _runningCommandVerb = narration.Verb;
+
         IsBusy = true;
         _sendCts = new CancellationTokenSource();
         var token = _sendCts.Token;
+
+        // Anything the turn renders itself is the real answer; the confirmation
+        // below is only for the case where nothing was rendered at all.
+        var itemsBefore = Items.Count;
+
         try
         {
             await foreach (var _ in _chatService.SendMessageAsync(message, token))
             {
                 // Output is handled by listener callbacks
             }
+
+            if (narration.Done is not null && Items.Count == itemsBefore)
+                EmitLocalMessage($"_{narration.Done}_");
 
             // Persist conversation history after each completed exchange
             PersistConversationHistoryFireAndForget();
@@ -727,6 +798,11 @@ public partial class ChatSessionViewModel : ObservableObject, IDisposable
         {
             _sendCts?.Dispose();
             _sendCts = null;
+
+            // Cleared before IsBusy, so the status line's final update already
+            // has it gone and a cancelled /compact cannot leave the next turn
+            // claiming to be compacting.
+            _runningCommandVerb = null;
             IsBusy = false;
         }
         RequestScroll();

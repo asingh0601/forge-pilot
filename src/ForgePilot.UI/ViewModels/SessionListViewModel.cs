@@ -93,7 +93,13 @@ public partial class SessionListViewModel : ObservableObject
     private string _searchText = string.Empty;
 
     public event Action<SessionInfo>? SessionOpenRequested;
-    public event Action<SessionInfo>? SessionRemoved;
+
+    /// <summary>
+    /// Raised after a session is deleted, with the entry that should take its
+    /// place. The replacement is never null — deleting the last session creates
+    /// a fresh one rather than leaving the list empty.
+    /// </summary>
+    public event Action<SessionInfo, SessionInfo?>? SessionRemoved;
 
     public SessionListViewModel()
     {
@@ -142,6 +148,18 @@ public partial class SessionListViewModel : ObservableObject
     [RelayCommand]
     public async Task NewSessionAsync()
     {
+        var session = await CreateSessionAsync();
+        SessionOpenRequested?.Invoke(session);
+    }
+
+    /// <summary>
+    /// Creates and persists a session and adds it to the list, without asking
+    /// for it to be opened. Split out so deleting the last session can replace
+    /// it without the open request racing the package's own decision about
+    /// which session the window should show.
+    /// </summary>
+    private async Task<SessionInfo> CreateSessionAsync()
+    {
         var session = new SessionInfo
         {
             Name = $"Chat {Sessions.Count + 1}",
@@ -160,7 +178,7 @@ public partial class SessionListViewModel : ObservableObject
 
         Sessions.Insert(0, session);
         SelectedSession = session;
-        SessionOpenRequested?.Invoke(session);
+        return session;
     }
 
     [RelayCommand]
@@ -175,9 +193,12 @@ public partial class SessionListViewModel : ObservableObject
     private async Task RemoveSessionAsync(SessionInfo? session)
     {
         if (session is null) return;
+
+        var wasLoaded = SelectedSession == session;
+        var index = Sessions.IndexOf(session);
+
         session.IsActive = false;
         Sessions.Remove(session);
-        SessionRemoved?.Invoke(session);
 
         if (session.PersistedId.HasValue && _sessionStore is not null && _folderPath is not null)
         {
@@ -188,7 +209,21 @@ public partial class SessionListViewModel : ObservableObject
             catch { /* best effort */ }
         }
 
-        if (SelectedSession == session)
-            SelectedSession = Sessions.FirstOrDefault();
+        // Always somewhere to go: the row that slid into the deleted one's
+        // place, else the last remaining one, else a brand new session — the
+        // panel must never be left with nothing to show.
+        var replacement = Sessions.ElementAtOrDefault(index)
+            ?? Sessions.LastOrDefault()
+            ?? await CreateSessionAsync();
+
+        if (wasLoaded || SelectedSession is null)
+            SelectedSession = replacement;
+
+        // Whether the window switches is the package's decision, not this
+        // view model's: only the package knows which session is actually on
+        // screen. Deciding it here from SelectedSession was the bug — the two
+        // can point at different sessions, so deleting the open conversation
+        // took the "not loaded" path and closed the whole panel.
+        SessionRemoved?.Invoke(session, replacement);
     }
 }

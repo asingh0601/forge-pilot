@@ -20,26 +20,28 @@
     <Style x:Key="FpMenuItemStyle" TargetType="MenuItem">
         <Setter Property="Foreground" Value="{DynamicResource FpForeground}"/>
         <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
         <Setter Property="Padding" Value="0"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
                     <Border x:Name="bd"
                             Background="Transparent"
-                            CornerRadius="7"
-                            Padding="9,7"
+                            CornerRadius="8"
+                            Padding="10,8"
                             Margin="0,1"
                             SnapsToDevicePixels="True">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="18"/>
+                                <ColumnDefinition Width="20"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Accent tick in place of the system checkmark. -->
+                            <!-- Accent tick in place of the blue system checkmark. -->
                             <Path x:Name="check"
                                   Grid.Column="0"
-                                  Visibility="Collapsed"
+                                  Opacity="0"
                                   Stroke="{DynamicResource FpAccent}"
                                   StrokeThickness="2"
                                   StrokeStartLineCap="Round"
@@ -54,16 +56,28 @@
                             <ContentPresenter Grid.Column="1"
                                               ContentSource="Header"
                                               VerticalAlignment="Center"
-                                              Margin="2,0,10,0"/>
+                                              Margin="2,0,14,0"/>
+
+                            <!-- Trailing hint: the keyboard digit, or a word like
+                                 "Enable" for a row that is an action rather than
+                                 a selection. Dim, so it reads as an affordance
+                                 and not as part of the label. -->
+                            <TextBlock x:Name="hint"
+                                       Grid.Column="2"
+                                       Text="{TemplateBinding InputGestureText}"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource FpFaint}"
+                                       FontSize="12"/>
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{DynamicResource FpSurfaceSubtle}"/>
                         </Trigger>
+                        <!-- Opacity rather than Visibility so the row never
+                             reflows as the tick appears. -->
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="check" Property="Visibility" Value="Visible"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FpForeground}"/>
+                            <Setter TargetName="check" Property="Opacity" Value="1"/>
                             <Setter Property="FontWeight" Value="SemiBold"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
@@ -77,23 +91,51 @@
 
     <Style x:Key="FpContextMenuStyle" TargetType="ContextMenu">
         <Setter Property="ItemContainerStyle" Value="{StaticResource FpMenuItemStyle}"/>
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Grid.IsSharedSizeScope" Value="True"/>
+        <!-- HasDropShadow off: the system shadow is a hard grey rectangle that
+             ignores the rounded corner. The DropShadowEffect below follows it. -->
+        <Setter Property="HasDropShadow" Value="False"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContextMenu">
-                    <Border Background="{DynamicResource FpSurface}"
-                            BorderBrush="{DynamicResource FpBorder}"
-                            BorderThickness="1"
-                            CornerRadius="12"
-                            Padding="5"
-                            SnapsToDevicePixels="True">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="16" ShadowDepth="3" Direction="270" Opacity="0.16" Color="Black"/>
-                        </Border.Effect>
-                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                    <!-- Outer margin leaves room for the shadow, which would
+                         otherwise be clipped by the popup window. -->
+                    <Border Margin="8" Padding="0">
+                        <Border x:Name="shell"
+                                Background="{DynamicResource FpSurface}"
+                                BorderBrush="{DynamicResource FpBorder}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="6"
+                                SnapsToDevicePixels="True">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="22" ShadowDepth="4" Direction="270"
+                                                  Opacity="0.22" Color="Black" RenderingBias="Quality"/>
+                            </Border.Effect>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          MaxHeight="420">
+                                <StackPanel IsItemsHost="True"
+                                            KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                            </ScrollViewer>
+                        </Border>
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- Section caption inside a menu ("Mode"). A TextBlock rather than a
+         disabled MenuItem: a disabled item still takes keyboard focus in the
+         arrow-key cycle, so the first Down press would land on the caption. -->
+    <Style x:Key="FpMenuHeaderStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FpFaint}"/>
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+        <Setter Property="Margin" Value="12,6,12,4"/>
     </Style>
 
     <Style x:Key="FpSeparatorStyle" TargetType="Separator">

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Windows;
 using ForgePilot.Services.Abstractions;
 using ForgePilot.Services.DependencyInjection;
+using ForgePilot.Services.Models;
 using ForgePilot.Services.Services;
 using ForgePilot.UI;
 using ForgePilot.UI.Controls;
@@ -57,6 +58,26 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
     // Exposed so tool windows can bind when VS restores them
     internal static SessionListViewModel? SessionListVM => _instance?._sessionListViewModel;
+
+    /// <summary>
+    /// The options page, for components that cannot call GetDialogPage
+    /// themselves — the MEF completion provider in particular. Null until the
+    /// package loads, which callers must treat as "completions off".
+    /// </summary>
+    internal static ForgePilotOptionsPage? OptionsPage
+    {
+        get
+        {
+            try
+            {
+                return _instance?.GetDialogPage(typeof(ForgePilotOptionsPage)) as ForgePilotOptionsPage;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
 
     /// <summary>
     /// Discovers the CLI's commands / skills / connectors / plugins for the
@@ -111,10 +132,27 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
             });
         };
 
-        _sessionListViewModel.SessionRemoved += session =>
+        _sessionListViewModel.SessionRemoved += (session, replacement) =>
         {
             _ = JoinableTaskFactory.RunAsync(async () =>
             {
+                await JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                // Only the session on screen matters; deleting any other is a
+                // list operation. _activeSessionId is the authority — the
+                // list's SelectedSession tracks selection and can point at a
+                // different entry, which is why deciding this in the view model
+                // closed the panel when the open session was deleted.
+                if (_activeSessionId != session.Id) return;
+
+                if (replacement is not null)
+                {
+                    // Swaps the view model inside the existing window, which
+                    // also disposes the deleted session's CLI process.
+                    await OpenOrActivateSessionAsync(replacement);
+                    return;
+                }
+
                 await CloseSessionWindowAsync(session);
             });
         };
@@ -133,6 +171,39 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
         Initialized?.Invoke();
 
+        // First run after installation: open the chat window once so the
+        // extension is visibly there, docked beside Solution Explorer by the
+        // ProvideToolWindow hints, rather than hiding behind a menu the user
+        // has to know about.
+        //
+        // Once only. After this the window is part of the saved layout (it is
+        // not Transient), so VS restores it if it was open at shutdown and
+        // leaves it closed if the user closed it — forcing it open every launch
+        // would override that choice.
+        _ = JoinableTaskFactory.RunAsync(async () =>
+        {
+            try
+            {
+                // Let the shell finish starting; opening a tool window that
+                // hosts a WebView2 during package init makes startup visibly
+                // slower.
+                await Task.Delay(TimeSpan.FromSeconds(2), DisposalToken);
+
+                // Safety net for the restore path: if VS rebuilt the chat window
+                // from a saved layout before this package finished initializing,
+                // the window's own OnToolWindowCreated found no session list to
+                // read and gave up. A no-op when a session is already loaded.
+                EnsureSessionLoaded();
+
+                await ShowOnFirstRunAsync();
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                LogWindow($"first-run auto-show failed: {ex.Message}");
+            }
+        });
+
         // Check the Marketplace for a newer published version and surface an InfoBar
         // if one is available. Fire-and-forget on a background task with a small delay
         // so we don't compete with VS startup work.
@@ -145,6 +216,44 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
             }
             catch (OperationCanceledException) { }
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Opens the chat window the first time this build runs, then records that
+    /// it has done so.
+    ///
+    /// The marker is a file next to the logs rather than a DialogPage setting,
+    /// so it survives independently of the options store and can be deleted by
+    /// hand to re-trigger the welcome.
+    /// </summary>
+    private async Task ShowOnFirstRunAsync()
+    {
+        var marker = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "ForgePilot", ".shown");
+
+        try
+        {
+            if (File.Exists(marker)) return;
+        }
+        catch
+        {
+            // Unreadable marker: skip rather than pop the window every launch.
+            return;
+        }
+
+        LogWindow("first run - opening chat window automatically");
+        await ShowChatSessionWindowAsync();
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
+            File.WriteAllText(marker, DateTime.UtcNow.ToString("O"));
+        }
+        catch
+        {
+            // Worst case the window opens once more next launch.
+        }
     }
 
     private async Task InitializeSessionPersistenceAsync()
@@ -325,7 +434,12 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
         await OpenOrActivateSessionAsync(mostRecent);
     }
 
-    private static async Task OpenOrActivateSessionAsync(SessionInfo session)
+    /// <param name="silent">
+    /// Report failures to the log instead of a modal. Set on paths the user did
+    /// not initiate — restoring a window during VS startup in particular, where
+    /// a dialog appears over the start page with no action attached to it.
+    /// </param>
+    private static async Task OpenOrActivateSessionAsync(SessionInfo session, bool silent = false)
     {
         LogWindow($"OpenOrActivateSession: '{session.Name}' id={session.Id}");
 
@@ -507,11 +621,154 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Forge Pilot error: {ex.Message}", "Forge Pilot", MessageBoxButton.OK, MessageBoxImage.Error);
+            LogWindow($"  ERROR opening session: {ex}");
+
+            if (!silent)
+            {
+                MessageBox.Show($"Forge Pilot error: {ex.Message}", "Forge Pilot", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
         finally
         {
             _openSessionGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Persists a chip choice to Tools → Options so it becomes the default for
+    /// the next session and survives a restart.
+    ///
+    /// New sessions are built from the Options page (see CreateChatViewModel),
+    /// so without this a chip change was scoped to the running CLI process and
+    /// silently reverted the moment a new session was opened.
+    /// </summary>
+    internal static void PersistSessionSettings(SessionSettings settings)
+    {
+        try
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            var page = OptionsPage;
+            if (page is null) return;
+
+            page.Model = settings.Model ?? "";
+            page.MaxThinkingTokens = settings.MaxThinkingTokens;
+            page.CliPermissionMode = settings.PermissionMode;
+            page.SaveSettingsToStorage();
+        }
+        catch (Exception ex)
+        {
+            // The setting is already live for this session; failing to write it
+            // to the registry is not worth interrupting the user for.
+            LogWindow($"persisting session settings failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Makes sure the chat window has a session in it.
+    ///
+    /// Called when the tool window is created, which includes the case VS
+    /// restores it from a saved layout — there the package's normal open path
+    /// never runs, leaving the panel bound to nothing.
+    ///
+    /// Safe to call repeatedly: it returns immediately once a session is
+    /// loaded, and the open path sets _activeSessionId before requesting the
+    /// window, so a normal open is never disturbed.
+    /// </summary>
+    internal static void EnsureSessionLoaded()
+    {
+        var package = _instance;
+        if (package is null) return;
+
+        package.JoinableTaskFactory.RunAsync(async () =>
+        {
+            try
+            {
+                await package.JoinableTaskFactory.SwitchToMainThreadAsync(package.DisposalToken);
+
+                // Let the shell finish building the tool window before asking
+                // for it again.
+                //
+                // This runs from OnToolWindowCreated, i.e. from inside VS's own
+                // tool-window construction. Calling ShowToolWindowAsync on that
+                // stack re-enters the Lazy<T> the shell uses to hold the pane
+                // and throws "The value factory has called for the value on the
+                // same instance". Yielding to a later dispatcher pass lets
+                // construction complete, after which the window already exists
+                // and is simply returned rather than built again.
+                await System.Windows.Threading.Dispatcher.Yield(
+                    System.Windows.Threading.DispatcherPriority.Background);
+
+                if (package._activeSessionId is not null) return;
+
+                // Initialization may still be running — the delayed startup
+                // block calls this again once the list exists.
+                var list = package._sessionListViewModel;
+                if (list is null) return;
+
+                var session = list.Sessions
+                    .OrderByDescending(s => s.LastActivity)
+                    .FirstOrDefault();
+
+                LogWindow($"EnsureSessionLoaded: restoring '{session?.Name ?? "<new session>"}'");
+
+                if (session is null)
+                {
+                    await list.NewSessionAsync();
+                    return;
+                }
+
+                await OpenOrActivateSessionAsync(session, silent: true);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                LogWindow($"EnsureSessionLoaded failed: {ex.Message}");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Whether editor inline completions are on. False when the package has no
+    /// options page yet, which is the same answer the completion provider gives
+    /// in that state.
+    /// </summary>
+    internal static bool CompletionsEnabled
+    {
+        get
+        {
+            try
+            {
+                ThreadHelper.ThrowIfNotOnUIThread();
+                return OptionsPage?.CompletionsEnabled ?? false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Flips inline completions and persists the choice, so the toggle in the
+    /// session menu and the checkbox in Tools → Options are the same setting
+    /// rather than two that can disagree.
+    /// </summary>
+    internal static void SetCompletionsEnabled(bool enabled)
+    {
+        try
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            var page = OptionsPage;
+            if (page is null) return;
+
+            page.CompletionsEnabled = enabled;
+            page.SaveSettingsToStorage();
+        }
+        catch (Exception ex)
+        {
+            LogWindow($"toggling completions failed: {ex.Message}");
         }
     }
 

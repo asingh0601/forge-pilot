@@ -47,42 +47,74 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
     private long _cumulativeTokens;
 
     /// <summary>
-    /// Total tokens reported by the CLI across this session — input, output and
-    /// both cache counters. Null until the first turn completes, since the CLI
-    /// only reports usage on the result event.
+    /// Size of the conversation as of the last completed turn — the prompt it
+    /// carried plus the reply. Null until the first turn completes, since the
+    /// CLI only reports usage on the result event.
+    ///
+    /// Deliberately not a running total of every turn: cache reads repeat the
+    /// whole prefix each time, so summing them reports a several-message chat as
+    /// hundreds of thousands of tokens.
     /// </summary>
     public long? GetSessionTokens() => _cumulativeTokens > 0 ? _cumulativeTokens : null;
 
     /// <summary>
     /// Pulls token counts out of a result event's <c>usage</c> object.
     ///
-    /// Cache reads and writes are counted alongside input and output: they are
-    /// real tokens the request moved, and omitting them makes a heavily cached
-    /// session look almost free when it wasn't. Every field is optional — the
-    /// CLI's usage shape has changed before and unknown keys are ignored rather
-    /// than throwing mid-turn.
+    /// Every field is optional — the CLI's usage shape has changed before, and
+    /// unknown or missing keys are ignored rather than throwing mid-turn.
     /// </summary>
     private void AccumulateUsage(JsonElement evt)
     {
         if (!evt.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
             return;
 
-        foreach (var field in new[]
-                 {
-                     "input_tokens",
-                     "output_tokens",
-                     "cache_creation_input_tokens",
-                     "cache_read_input_tokens"
-                 })
-        {
-            if (usage.TryGetProperty(field, out var v) && v.ValueKind == JsonValueKind.Number &&
-                v.TryGetInt64(out var n) && n > 0)
-            {
-                _cumulativeTokens += n;
-            }
-        }
+        var input = Read(usage, "input_tokens");
+        var output = Read(usage, "output_tokens");
+        var cacheWrite = Read(usage, "cache_creation_input_tokens");
+        var cacheRead = Read(usage, "cache_read_input_tokens");
+
+        _inputTokens += input;
+        _outputTokens += output;
+        _cacheWriteTokens += cacheWrite;
+
+        // Cache reads are NOT summed across turns. Each turn re-reads the whole
+        // conversation prefix from cache, so the same tokens are reported again
+        // on every exchange — adding them up counted a short chat as 168k. The
+        // latest value is the size of the prefix, which is the useful number.
+        _cacheReadTokens = cacheRead;
+
+        _turnCount++;
+
+        // "Tokens in this conversation" = what the last turn actually carried:
+        // the prompt (fresh input + whatever was cached) plus the reply. This is
+        // context size, and it grows with the conversation rather than with the
+        // number of times it has been re-sent.
+        _cumulativeTokens = input + cacheRead + cacheWrite + output;
+
+        static long Read(JsonElement usage, string field) =>
+            usage.TryGetProperty(field, out var v) && v.ValueKind == JsonValueKind.Number &&
+            v.TryGetInt64(out var n) && n > 0
+                ? n
+                : 0;
     }
+
+    // Broken out because they do not combine: input, output and cache writes
+    // accumulate across turns, while a cache read is a re-read of the prefix and
+    // is therefore a size, not something to add up.
+    private long _inputTokens;
+    private long _outputTokens;
+    private long _cacheWriteTokens;
+    private long _cacheReadTokens;
+    private int _turnCount;
+
     private Task? _dispatcherTask;
+
+    /// <summary>
+    /// The channel <see cref="_dispatcherTask"/> is reading. Used to detect a
+    /// host restart, which replaces the channel and strands the old loop.
+    /// </summary>
+    private ChannelReader<JsonElement>? _dispatcherReader;
+
     private readonly object _dispatcherLock = new object();
 
     // The dispatcher consumes events from the host and routes them to whichever
@@ -186,20 +218,43 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
         }
     }
 
+    /// <summary>
+    /// Starts a dispatcher for the host's <em>current</em> event channel.
+    ///
+    /// Binding to the channel identity rather than just "is a dispatcher
+    /// running" is what makes a CLI restart safe. Every restart builds a new
+    /// channel, and the old loop is still awaiting the old one: the writer is
+    /// only completed from the process <c>Exited</c> callback, which fires
+    /// asynchronously some time after <c>Stop()</c> returns. A liveness-only
+    /// check therefore sees the stale loop as healthy and declines to start one
+    /// for the new process — so nothing ever reads the new channel and the next
+    /// turn hangs forever. That was the "change the model and it never
+    /// responds" failure.
+    ///
+    /// The stale loop needs no cleanup: its channel completes when the old
+    /// process dies, and it exits on its own.
+    /// </summary>
     private void EnsureDispatcherStarted()
     {
         lock (_dispatcherLock)
         {
-            if (_dispatcherTask is { IsCompleted: false }) return;
-            _dispatcherTask = Task.Run(DispatcherLoopAsync);
+            var reader = _host.EventReader;
+
+            if (_dispatcherTask is { IsCompleted: false } &&
+                ReferenceEquals(_dispatcherReader, reader))
+            {
+                return;
+            }
+
+            _dispatcherReader = reader;
+            _dispatcherTask = Task.Run(() => DispatcherLoopAsync(reader));
         }
     }
 
-    private async Task DispatcherLoopAsync()
+    private async Task DispatcherLoopAsync(ChannelReader<JsonElement> reader)
     {
         try
         {
-            var reader = _host.EventReader;
             while (await reader.WaitToReadAsync().ConfigureAwait(false))
             {
                 while (reader.TryRead(out var evt))
@@ -262,6 +317,23 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
         {
             _cliSessionId = sid.GetString();
             _logger.LogDebug("[ClaudeCli] Session started: {SessionId}", _cliSessionId);
+        }
+
+        // The model the CLI actually resolved. This is the only trustworthy
+        // source: when nothing is pinned we omit --model entirely and the CLI
+        // picks the account default, which the extension cannot otherwise know.
+        // Asking the model what it is does not work — models routinely
+        // misidentify themselves.
+        if (evt.TryGetProperty("model", out var model) && model.ValueKind == JsonValueKind.String)
+        {
+            var reported = model.GetString();
+            if (!string.IsNullOrWhiteSpace(reported) && reported != _activeModel)
+            {
+                _activeModel = reported;
+                _logger.LogInformation("[ClaudeCli] Model in effect: {Model}", reported);
+                try { ModelReported?.Invoke(reported!); }
+                catch (Exception ex) { _logger.LogWarning(ex, "[ClaudeCli] ModelReported handler threw"); }
+            }
         }
         // Diagnostic: dump the available tool names so we can verify whether
         // AskUserQuestion is registered in headless mode.
@@ -349,6 +421,18 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
         var text = block.TryGetProperty("text", out var tp) ? tp.GetString() ?? "" : "";
         if (string.IsNullOrEmpty(text)) return;
 
+        EmitAssistantText(turn, text);
+    }
+
+    /// <summary>
+    /// Renders assistant prose into the transcript and onto the turn's delta
+    /// channel.
+    ///
+    /// Shared by streamed text blocks and by the result event, which is the only
+    /// place a built-in slash command's answer appears.
+    /// </summary>
+    private void EmitAssistantText(TurnState turn, string text)
+    {
         if (turn.ResponseItem == null)
         {
             turn.ResponseItem = new OutputItem
@@ -474,10 +558,27 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
         }
         else
         {
-            if (evt.TryGetProperty("cost_usd", out var cost) && cost.ValueKind == JsonValueKind.Number)
-                _cumulativeCostUsd += cost.GetDecimal();
+            // "total_cost_usd", not "cost_usd" — the latter does not exist on the
+            // result event, so the old lookup silently never matched and cost
+            // stayed at zero for the whole session.
+            //
+            // Assigned, not accumulated: the CLI already reports the running
+            // session total, so adding it each turn would compound it.
+            if (evt.TryGetProperty("total_cost_usd", out var cost) && cost.ValueKind == JsonValueKind.Number)
+                _cumulativeCostUsd = cost.GetDecimal();
 
             AccumulateUsage(evt);
+
+            // The result event's "result" field is deliberately NOT rendered.
+            //
+            // It was, briefly, on the theory that built-in slash commands had no
+            // assistant block to stream. Testing disproved that — /usage,
+            // /context and /model all emit ordinary assistant text, which the
+            // normal path already renders. What the field actually holds is the
+            // turn's closing text, which after a successful /compact is the
+            // PREVIOUS turn's reply; rendering it resurrected the last answer
+            // under the new command. A command with nothing to say should show
+            // nothing.
         }
 
         // Signal SendMessageAsync to return.
@@ -836,6 +937,14 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
 
     public decimal? GetSessionCost() => _cumulativeCostUsd > 0 ? _cumulativeCostUsd : null;
 
+    private string? _activeModel;
+
+    /// <inheritdoc />
+    public string? ActiveModel => _activeModel;
+
+    /// <inheritdoc />
+    public event Action<string>? ModelReported;
+
     public SessionSettings GetSettings() =>
         new(_options.Model, _options.MaxThinkingTokens, _options.CliPermissionMode);
 
@@ -967,6 +1076,7 @@ public sealed class ClaudeCliChatService : IChatService, IDisposable
 
         public OutputItem? ResponseItem;
         public StringBuilder ResponseBuilder = new StringBuilder();
+
 
         public OutputItem? ToolItem;
 

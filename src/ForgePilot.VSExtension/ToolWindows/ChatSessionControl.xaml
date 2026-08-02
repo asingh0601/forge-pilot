@@ -476,7 +476,7 @@
                                         Style="{StaticResource ModeChipStyle}"
                                         Click="ModeChip_Click"
                                         Content="{Binding ModeLabel}"
-                                        ToolTip="Toggle plan mode — Claude proposes an approach before touching anything"/>
+                                        ToolTip="Permission mode — how much Claude may do without asking"/>
                             </StackPanel>
 
                             <TextBlock Grid.Column="1"
@@ -520,7 +520,17 @@
                 <!-- One status row that swaps content, replacing the old
                      separate "Thinking..." strip that shifted the layout. -->
                 <Grid Grid.Row="2" Margin="14,6,14,0">
-                    <TextBlock FontSize="11.5"
+                    <!-- Two rows. The hint and the working line swap inside row 0
+                         (they are mutually exclusive on IsBusy), while usage gets
+                         a row of its own — it is visible in both states, so
+                         sharing a cell drew it on top of the hint. -->
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               FontSize="11.5"
                                Foreground="{DynamicResource FpFaint}"
                                Text="Enter to send · Shift+Enter for a new line · @ for files">
                         <TextBlock.Style>
@@ -535,7 +545,7 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <StackPanel Orientation="Horizontal"
+                    <StackPanel Grid.Row="0" Orientation="Horizontal"
                                 Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
                         <TextBlock Text="{Binding ActivityGlyph}"
                                    FontSize="11.5"
@@ -545,6 +555,26 @@
                                    FontSize="11.5"
                                    Foreground="{DynamicResource FpMuted}"/>
                     </StackPanel>
+
+                    <!-- Not tied to IsBusy: the total is worth reading after a
+                         turn ends, which is exactly when the working line
+                         disappears. -->
+                    <TextBlock Grid.Row="1"
+                               Text="{Binding UsageLine}"
+                               FontSize="11"
+                               Margin="0,2,0,0"
+                               Foreground="{DynamicResource FpFaint}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding UsageLine}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Grid>
             </Grid>
         </Border>

@@ -112,6 +112,12 @@ html, body {
     padding: 0 24px var(--space-4);
 }
 
+/* A user turn starts a new beat, so it gets the gap rather than every message
+   carrying one — spacing after the assistant's last paragraph would otherwise
+   double up with that paragraph's own bottom margin. */
+.msg-user { margin-top: 18px; }
+.msg-user:first-child { margin-top: 0; }
+
 /* Thin and low-contrast: the scrollbar is orientation, not chrome. */
 ::-webkit-scrollbar { width: 11px; height: 11px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -134,10 +140,14 @@ html, body {
     /* No border: the fill alone separates it, and an outline at this size
        reads as a control rather than something someone said. */
     border: none;
-    border-radius: var(--radius-lg);
-    padding: 9px 15px;
-    max-width: 82%;
-    line-height: 1.6;
+    /* Fully rounded ends. At this size a softer radius reads as speech rather
+       than as a panel, which is what separates it from the tool cards. */
+    border-radius: 18px;
+    padding: 10px 16px;
+    max-width: 78%;
+    line-height: 1.58;
+    /* Slightly tighter than body prose: short utterances set better dense. */
+    letter-spacing: -0.002em;
 }
 .msg-user .md-content > *:first-child { margin-top: 0; }
 .msg-user .md-content > *:last-child { margin-bottom: 0; }
@@ -431,7 +441,10 @@ html, body {
 .md-content h4, .md-content h5, .md-content h6 { font-size: 1em; font-weight: 650; margin: 0.85em 0 0.3em; }
 .md-content > h1:first-child, .md-content > h2:first-child, .md-content > h3:first-child { margin-top: 0; }
 
-.md-content p { margin: 0.7em 0; }
+/* Paragraph gap slightly under one line of leading: enough to separate, not so
+   much that a two-paragraph answer reads as two disconnected statements. */
+.md-content p { margin: 0.72em 0; }
+.md-content p:last-child { margin-bottom: 0; }
 .md-content a { color: var(--accent); text-decoration: none; }
 .md-content a:hover { text-decoration: underline; text-underline-offset: 2px; }
 .md-content a.file-link { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; text-decoration-thickness: 1px; }
@@ -443,18 +456,35 @@ html, body {
        is enough to mark it as code. */
     border: none;
     padding: 1.5px 5px;
-    border-radius: 4px;
+    border-radius: 5px;
     font-family: var(--font-mono);
     font-size: 0.855em;
     font-variant-ligatures: none;
+    /* Mono runs optically small against the sans body; a hair of tracking and
+       a slightly heavier weight bring an identifier back to matching colour. */
+    letter-spacing: 0.005em;
+    font-weight: 500;
+    white-space: nowrap;
 }
+/* An identifier long enough to wrap is better broken than pushed off the edge. */
+.md-content p > code, .md-content li > code { white-space: normal; }
 .md-content pre {
     background: var(--code-bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: 14px 16px;
-    margin: 0.9em 0;
+    padding: 13px 16px;
+    margin: 0.95em 0;
     overflow-x: auto;
+    /* Code sets denser than prose, so it needs its own tracking reset and a
+       slightly tighter measure than the surrounding paragraph rhythm. */
+    letter-spacing: 0;
+}
+/* A short horizontal scrollbar inside a code block should not be as heavy as
+   the transcript's own. */
+.md-content pre::-webkit-scrollbar { height: 8px; }
+.md-content pre::-webkit-scrollbar-thumb {
+    border-width: 2.5px;
+    border-color: var(--code-bg);
 }
 .md-content pre code {
     background: none;
@@ -471,8 +501,11 @@ html, body {
     padding: 0.15em 0 0.15em 15px;
     color: var(--muted);
 }
-.md-content ul, .md-content ol { margin: 0.7em 0; padding-left: 1.45em; }
-.md-content li { margin: 0.3em 0; padding-left: 0.15em; }
+.md-content ul, .md-content ol { margin: 0.7em 0; padding-left: 1.4em; }
+/* Marker sits closer to its text than the default, and items get a touch more
+   air — a run of one-line bullets is the most common shape in these answers. */
+.md-content li { margin: 0.34em 0; padding-left: 0.1em; }
+.md-content li::marker { font-size: 0.92em; }
 .md-content li::marker { color: var(--faint); }
 /* Nested lists sit closer — the indent already signals the level. */
 .md-content li > ul, .md-content li > ol { margin: 0.3em 0; }
@@ -500,6 +533,66 @@ html, body {
     border-bottom-color: var(--border-strong);
 }
 .md-content tr:last-child td { border-bottom: none; }
+
+/* ── /usage meters ───────────────────────────────────────────────────────
+   Quota percentages set as bars. The number stays alongside the bar: a bar
+   answers "how full" at a glance, the figure answers "how much exactly", and
+   dropping either makes the other do a job it is bad at. */
+.usage-report { margin: 0.2em 0 0; }
+.usage-row { margin: 0 0 14px; }
+.usage-row:last-of-type { margin-bottom: 4px; }
+
+.usage-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 5px;
+}
+.usage-label { font-size: 13px; color: var(--text); }
+.usage-pct {
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.usage-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface-subtle);
+    overflow: hidden;
+}
+.usage-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent);
+    /* A quota at 0% still renders a sliver, so an empty bar is legible as a
+       bar rather than as an empty box. */
+    min-width: 2px;
+    transition: width 0.25s ease;
+}
+.usage-fill.warn   { background: #D9A54A; }
+.usage-fill.danger { background: var(--error); }
+
+.usage-reset {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: var(--faint);
+}
+
+/* The prose that follows the quotas — request counts and so on. Set smaller
+   and dimmer so the meters keep the emphasis. */
+.usage-notes {
+    margin-top: 16px;
+    padding-top: 13px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+}
+.usage-notes p { margin: 0.5em 0; }
+.usage-notes p:first-child { margin-top: 0; }
+.usage-notes p:last-child { margin-bottom: 0; }
 
 .md-content hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
 .md-content img { max-width: 100%; border-radius: var(--radius-sm); }
@@ -660,6 +753,90 @@ function tryRenderTodos(text) {
         ul.appendChild(li);
     }
     return ul;
+}
+
+/**
+ * Turns the CLI's /usage report into labelled meters.
+ *
+ * The percentages are the point of that output and they arrive buried in prose,
+ * so they get bars; everything after the quota block is ordinary prose and is
+ * left as markdown. Returns null when the text is not a usage report, so any
+ * other answer falls straight through.
+ *
+ * Matching is on the "N% used" shape rather than on the surrounding sentence,
+ * which is wording the CLI is free to change.
+ */
+function tryRenderUsage(text) {
+    if (!text) return null;
+
+    var lines = text.split('\n');
+    var quotas = [];
+    var lastQuotaLine = -1;
+
+    for (var i = 0; i < lines.length; i++) {
+        // "Current session: 10% used · resets Aug 2, 1:09pm (Asia/Calcutta)"
+        var m = /^\s*(.+?):\s*(\d+(?:\.\d+)?)%\s*used\s*(?:·\s*resets\s*(.+?))?\s*$/.exec(lines[i]);
+        if (!m) continue;
+        quotas.push({ label: m[1].trim(), pct: parseFloat(m[2]), resets: (m[3] || '').trim() });
+        lastQuotaLine = i;
+    }
+
+    if (quotas.length < 2) return null;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'usage-report';
+
+    for (var q = 0; q < quotas.length; q++) {
+        var row = document.createElement('div');
+        row.className = 'usage-row';
+
+        var head = document.createElement('div');
+        head.className = 'usage-head';
+
+        var label = document.createElement('span');
+        label.className = 'usage-label';
+        label.textContent = quotas[q].label;
+
+        var pct = document.createElement('span');
+        pct.className = 'usage-pct';
+        pct.textContent = quotas[q].pct + '%';
+
+        head.appendChild(label);
+        head.appendChild(pct);
+
+        var track = document.createElement('div');
+        track.className = 'usage-track';
+        var fill = document.createElement('div');
+        // Tinted by severity: a quota is only worth noticing as it fills.
+        fill.className = 'usage-fill'
+            + (quotas[q].pct >= 90 ? ' danger' : quotas[q].pct >= 70 ? ' warn' : '');
+        fill.style.width = Math.max(0, Math.min(100, quotas[q].pct)) + '%';
+        track.appendChild(fill);
+
+        row.appendChild(head);
+        row.appendChild(track);
+
+        if (quotas[q].resets) {
+            var reset = document.createElement('div');
+            reset.className = 'usage-reset';
+            reset.textContent = 'resets ' + quotas[q].resets;
+            row.appendChild(reset);
+        }
+
+        wrap.appendChild(row);
+    }
+
+    // Everything past the last quota line is commentary — kept, as markdown, so
+    // the request/session detail is not thrown away.
+    var rest = lines.slice(lastQuotaLine + 1).join('\n').trim();
+    if (rest) {
+        var notes = document.createElement('div');
+        notes.className = 'usage-notes md-content';
+        notes.innerHTML = renderMd(rest);
+        wrap.appendChild(notes);
+    }
+
+    return wrap;
 }
 
 /**
@@ -950,8 +1127,16 @@ function updateContent(id, contentMarkdown) {
         if (type === 'User' || type === 'Assistant') {
             var mc = el.querySelector('.msg-content');
             if (mc) {
-                mc.innerHTML = type === 'User' ? renderUserMd(contentMarkdown) : renderMd(contentMarkdown);
-                linkifyFilePaths(mc);
+                // Assistant answers get one structured path: a /usage report is
+                // a set of quotas, and reading them off prose is needless work.
+                var usage = type === 'Assistant' ? tryRenderUsage(contentMarkdown) : null;
+                if (usage) {
+                    mc.innerHTML = '';
+                    mc.appendChild(usage);
+                } else {
+                    mc.innerHTML = type === 'User' ? renderUserMd(contentMarkdown) : renderMd(contentMarkdown);
+                    linkifyFilePaths(mc);
+                }
             }
         } else if (type === 'ToolStep' || type === 'Thinking') {
             var sc = el.querySelector('.msg-streaming-content');

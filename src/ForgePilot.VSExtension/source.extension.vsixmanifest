@@ -3,7 +3,7 @@
                  xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
     <Identity Id="ForgePilot.VSExtension.8f4b1c27-6d3a-4e59-9a10-b7c2e5d84f13"
-              Version="1.0.0"
+              Version="1.0.1"
               Language="en-US"
               Publisher="Abhishek Singh" />
     <DisplayName>Forge Pilot</DisplayName>

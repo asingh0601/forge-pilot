@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
+using ForgePilot.Services.Abstractions;
 using ForgePilot.Services.Models;
 using ForgePilot.Services.Services;
 using Microsoft.VisualStudio.Imaging;
@@ -91,14 +92,87 @@ public partial class ChatSessionControl : UserControl
         }
 
         if (menu.Items.Count > 0)
-            menu.Items.Add(new Separator());
+        {
+            // ItemContainerStyle targets MenuItem, so a Separator would keep the
+            // native look unless styled explicitly.
+            menu.Items.Add(new Separator { Style = TryFindResource("FpSeparatorStyle") as Style });
+        }
 
         var newItem = new MenuItem { Header = "New session" };
         newItem.Click += (_, _) => _sessionListViewModel.NewSessionCommand.Execute(null);
         menu.Items.Add(newItem);
 
+        // Actions on the session that is currently loaded.
+        if (_currentSession is not null)
+        {
+            menu.Items.Add(new Separator { Style = TryFindResource("FpSeparatorStyle") as Style });
+
+            // Empties the transcript and the CLI's history but keeps the
+            // session, so the window stays on the same entry.
+            var clearItem = new MenuItem
+            {
+                Header = "Clear conversation",
+                IsEnabled = DataContext is ChatSessionViewModel { IsBusy: false }
+            };
+            clearItem.Click += (_, _) =>
+            {
+                if (DataContext is ChatSessionViewModel vm) vm.ClearCommand.Execute(null);
+            };
+            menu.Items.Add(clearItem);
+
+            // Deletes the session outright. Confirmed first: it removes the
+            // stored transcript, which nothing else can undo.
+            var deleteTarget = _currentSession;
+            var deleteItem = new MenuItem { Header = $"Delete \"{Truncate(deleteTarget.Name, 32)}\"" };
+            deleteItem.Click += (_, _) =>
+            {
+                var answer = MessageBox.Show(
+                    $"Delete the session \"{deleteTarget.Name}\"?\n\nIts transcript is removed permanently.",
+                    "Forge Pilot",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.Cancel);
+
+                if (answer == MessageBoxResult.OK)
+                    _sessionListViewModel.RemoveSessionCommand.Execute(deleteTarget);
+            };
+            menu.Items.Add(deleteItem);
+        }
+
+        // Editor-wide, not session-scoped — but this is the only menu the panel
+        // has, and burying an on/off switch in Tools → Options makes it awkward
+        // to flip while working.
+        menu.Items.Add(new Separator { Style = TryFindResource("FpSeparatorStyle") as Style });
+
+        var completionsItem = new MenuItem
+        {
+            Header = "Inline completions",
+            InputGestureText = "Editor",
+            IsCheckable = true,
+            IsChecked = ForgePilotPackage.CompletionsEnabled
+        };
+        completionsItem.Click += (_, _) =>
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            ForgePilotPackage.SetCompletionsEnabled(completionsItem.IsChecked);
+
+            // Read back rather than echo what was asked for: the options page is
+            // null until the package finishes loading, and a silent no-op there
+            // looks exactly like a toggle that does not work.
+            var actual = ForgePilotPackage.CompletionsEnabled;
+            StatusInfoText.Text = actual == completionsItem.IsChecked
+                ? (actual
+                    ? "Inline completions on — invoke them in the editor, they do not fire as you type"
+                    : "Inline completions off")
+                : "Could not change inline completions — settings are not available yet";
+        };
+        menu.Items.Add(completionsItem);
+
         menu.IsOpen = true;
     }
+
+    private static string Truncate(string value, int max) =>
+        string.IsNullOrEmpty(value) || value.Length <= max ? value : value.Substring(0, max - 1) + "…";
 
     private void NewSessionButton_Click(object sender, RoutedEventArgs e)
         => _sessionListViewModel?.NewSessionCommand.Execute(null);
@@ -118,10 +192,11 @@ public partial class ChatSessionControl : UserControl
 
         ShowChipMenu(ModelChip, ChatSessionViewModel.Models.Select(m => m.Label), current, label =>
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
             var chosen = ChatSessionViewModel.Models.First(m => m.Label == label);
             var s = vm.GetSessionSettings();
             if (s is null) return;
-            ReportIfBlocked(vm.ApplySessionSettings(s with { Model = chosen.Value }));
+            ApplyAndPersist(vm, s with { Model = chosen.Value });
         });
     }
 
@@ -132,17 +207,66 @@ public partial class ChatSessionControl : UserControl
 
         ShowChipMenu(EffortChip, ChatSessionViewModel.EffortLevels.Select(l => l.Label), current, label =>
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
             var chosen = ChatSessionViewModel.EffortLevels.First(l => l.Label == label);
             var s = vm.GetSessionSettings();
             if (s is null) return;
-            ReportIfBlocked(vm.ApplySessionSettings(s with { MaxThinkingTokens = chosen.Tokens }));
+            ApplyAndPersist(vm, s with { MaxThinkingTokens = chosen.Tokens });
         });
     }
 
+    /// <summary>
+    /// Opens the permission-mode picker. Previously a two-state plan/act
+    /// toggle, which could not reach acceptEdits, auto or bypassPermissions —
+    /// three of the five modes the CLI supports were unreachable from the UI.
+    /// </summary>
     private void ModeChip_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is ChatSessionViewModel vm)
-            ReportIfBlocked(vm.TogglePlanMode());
+        if (DataContext is not ChatSessionViewModel vm) return;
+        var current = vm.ModeLabel;
+
+        // Digits 1-3 for the everyday modes, matching the CLI's own shortcuts.
+        // Bypass gets "Enable" rather than a digit on purpose: it grants
+        // unprompted shell access, and a number key makes that one mistyped
+        // keystroke away.
+        var options = ChatSessionViewModel.PermissionModes
+            .Select((m, i) => (m.Label, Hint: i < 3 ? (i + 1).ToString() : ""))
+            .ToList();
+        // Index-from-end (^1) is unavailable on net472 — System.Index is missing.
+        var last = options.Count - 1;
+        options[last] = (options[last].Label, "Enable");
+
+        ShowChipMenu(ModeChip, options, current, "Mode", label =>
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            var chosen = ChatSessionViewModel.PermissionModes.First(m => m.Label == label);
+            var s = vm.GetSessionSettings();
+            if (s is null) return;
+            ApplyAndPersist(vm, s with { PermissionMode = chosen.Mode });
+        });
+    }
+
+    /// <summary>
+    /// Applies a chip choice and, when it took, writes it back to Tools →
+    /// Options.
+    ///
+    /// Without the write-back the choice lived only in the in-memory options
+    /// instance: correct for the running session, but every new session is
+    /// built from the Options page, so picking a model appeared to do nothing
+    /// as soon as the user opened another session or restarted VS.
+    /// </summary>
+    private void ApplyAndPersist(ChatSessionViewModel vm, SessionSettings settings)
+    {
+        // Only ever reached from a menu Click, which is already on the UI
+        // thread; stated so the threading analyzer can see it too.
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        var error = vm.ApplySessionSettings(settings);
+        ReportIfBlocked(error);
+
+        // Only persist what actually took — a mid-turn rejection must not
+        // become the new default.
+        if (error is null) ForgePilotPackage.PersistSessionSettings(settings);
     }
 
     /// <summary>
@@ -151,8 +275,16 @@ public partial class ChatSessionControl : UserControl
     /// Windows menu with a blue system checkmark and reads as another
     /// application intruding on the panel.
     /// </summary>
-    private static void ShowChipMenu(
+    private void ShowChipMenu(
         Button anchor, IEnumerable<string> options, string current, Action<string> onPick)
+        => ShowChipMenu(anchor, options.Select(o => (o, "")), current, null, onPick);
+
+    private void ShowChipMenu(
+        Button anchor,
+        IEnumerable<(string Label, string Hint)> options,
+        string current,
+        string? title,
+        Action<string> onPick)
     {
         var menu = new ContextMenu
         {
@@ -160,35 +292,78 @@ public partial class ChatSessionControl : UserControl
             Placement = System.Windows.Controls.Primitives.PlacementMode.Top,
             VerticalOffset = -6,
             HorizontalOffset = 0,
-            Style = Application.Current?.TryFindResource("FpContextMenuStyle") as Style
+            Style = MenuStyle
         };
 
-        foreach (var option in options)
+        if (!string.IsNullOrEmpty(title))
         {
-            var captured = option;
+            menu.Items.Add(new TextBlock
+            {
+                Text = title,
+                Style = TryFindResource("FpMenuHeaderStyle") as Style
+            });
+        }
+
+        // Digit shortcuts, in the order the rows were added. Held here rather
+        // than read off the menu items so the caption TextBlock never shifts
+        // the numbering.
+        var byDigit = new List<Action>();
+
+        foreach (var (label, hint) in options)
+        {
+            var captured = label;
             var item = new MenuItem
             {
                 Header = captured,
+                InputGestureText = hint,
                 IsCheckable = true,
                 IsChecked = captured == current
             };
-            item.Click += (_, _) =>
+            void Pick()
             {
+                menu.IsOpen = false;
                 if (captured != current) onPick(captured);
-            };
+            }
+            item.Click += (_, _) => Pick();
+            byDigit.Add(Pick);
             menu.Items.Add(item);
         }
+
+        // The digit hints have to actually do something — InputGestureText is
+        // display-only, so WPF never binds it to a key.
+        menu.PreviewKeyDown += (_, args) =>
+        {
+            var digit = args.Key switch
+            {
+                >= Key.D1 and <= Key.D9 => args.Key - Key.D1,
+                >= Key.NumPad1 and <= Key.NumPad9 => args.Key - Key.NumPad1,
+                _ => -1
+            };
+            if (digit < 0 || digit >= byDigit.Count) return;
+            args.Handled = true;
+            byDigit[digit]();
+        };
 
         menu.IsOpen = true;
     }
 
+    /// <summary>
+    /// The themed menu style.
+    ///
+    /// Resolved from THIS control, not Application.Current. BannerStyles.xaml is
+    /// merged into the control's own resources, never into the application's, so
+    /// an Application-level lookup returned null and every menu silently fell
+    /// back to the native Windows one.
+    /// </summary>
+    private Style? MenuStyle => TryFindResource("FpContextMenuStyle") as Style;
+
     /// <summary>Applies the themed style to a menu built elsewhere.</summary>
-    private static ContextMenu ThemedMenu(UIElement anchor,
+    private ContextMenu ThemedMenu(UIElement anchor,
         System.Windows.Controls.Primitives.PlacementMode placement) => new()
     {
         PlacementTarget = anchor,
         Placement = placement,
-        Style = Application.Current?.TryFindResource("FpContextMenuStyle") as Style
+        Style = MenuStyle
     };
 
     /// <summary>
@@ -218,34 +393,52 @@ public partial class ChatSessionControl : UserControl
         InputTextBox.CaretIndex = InputTextBox.Text.Length;
     }
 
+    /// <summary>
+    /// The session currently wired to this control, so its handlers can be
+    /// removed before another one is attached.
+    /// </summary>
+    private ChatSessionViewModel? _boundViewModel;
+
+    private bool _themeHandlerAttached;
+
+    /// <summary>
+    /// Points the control at a session.
+    ///
+    /// The control, and the WebView inside it, are reused for every session in
+    /// this window — only the view model is swapped. So this has to undo the
+    /// previous session completely: detach its handlers and wipe the
+    /// transcript. Without the wipe, a new or replacement session rendered on
+    /// top of the conversation that was already on screen, which is why
+    /// deleting a session left its messages behind and "new session" did not
+    /// start empty.
+    ///
+    /// Named handlers rather than lambdas, because a lambda cannot be
+    /// unsubscribed — each switch would stack another live subscription.
+    /// </summary>
     public void Initialize(ChatSessionViewModel viewModel)
     {
+        if (ReferenceEquals(_boundViewModel, viewModel)) return;
+
+        DetachViewModel();
+
+        _boundViewModel = viewModel;
         DataContext = viewModel;
+
+        // Queued through the same channel as the message calls, so it is
+        // ordered ahead of any transcript this session restores.
+        _ = ChatWebView.ClearAllAsync();
 
         // Seed the footer chips from whatever the session actually launched
         // with, rather than leaving them on their declared defaults.
         viewModel.RefreshSettingLabels();
 
-        viewModel.MessageAdded += (id, type, data) =>
-            _ = ChatWebView.AddMessageAsync(id, type, data);
-
-        viewModel.MessageContentUpdated += (id, content) =>
-            _ = ChatWebView.UpdateContentAsync(id, content);
-
-        viewModel.MessageStatusUpdated += (id, status, expanderTitle) =>
-            _ = ChatWebView.UpdateStatusAsync(id, status, expanderTitle);
-
-        viewModel.MessageBodySet += (id, body, mode) =>
-            _ = ChatWebView.SetBodyAsync(id, body, mode);
-
-        viewModel.MessageCompleted += (id) =>
-            _ = ChatWebView.CompleteMessageAsync(id);
-
-        viewModel.AllCleared += () =>
-            _ = ChatWebView.ClearAllAsync();
-
-        viewModel.MessagesRestored += (messages) =>
-            _ = ChatWebView.LoadMessagesAsync(messages);
+        viewModel.MessageAdded += OnMessageAdded;
+        viewModel.MessageContentUpdated += OnMessageContentUpdated;
+        viewModel.MessageStatusUpdated += OnMessageStatusUpdated;
+        viewModel.MessageBodySet += OnMessageBodySet;
+        viewModel.MessageCompleted += OnMessageCompleted;
+        viewModel.AllCleared += OnAllCleared;
+        viewModel.MessagesRestored += OnMessagesRestored;
 
         // Banner mounting is now driven by the ActiveBanner property on the VM —
         // the BannerHost ContentControl in XAML binds to it and DataTemplates
@@ -253,9 +446,52 @@ public partial class ChatSessionControl : UserControl
 
         ApplyTheme();
 
-        // Re-apply when VS theme changes
-        VSColorTheme.ThemeChanged += OnThemeChanged;
+        // Once per control, not once per session: this is a static event, so
+        // re-subscribing on every switch would leak a handler each time and
+        // repaint the theme once per session ever loaded.
+        if (!_themeHandlerAttached)
+        {
+            VSColorTheme.ThemeChanged += OnThemeChanged;
+            _themeHandlerAttached = true;
+        }
     }
+
+    private void DetachViewModel()
+    {
+        var vm = _boundViewModel;
+        if (vm is null) return;
+
+        vm.MessageAdded -= OnMessageAdded;
+        vm.MessageContentUpdated -= OnMessageContentUpdated;
+        vm.MessageStatusUpdated -= OnMessageStatusUpdated;
+        vm.MessageBodySet -= OnMessageBodySet;
+        vm.MessageCompleted -= OnMessageCompleted;
+        vm.AllCleared -= OnAllCleared;
+        vm.MessagesRestored -= OnMessagesRestored;
+
+        _boundViewModel = null;
+    }
+
+    private void OnMessageAdded(string id, ChatItemType type, ChatMessageData data)
+        => _ = ChatWebView.AddMessageAsync(id, type, data);
+
+    private void OnMessageContentUpdated(string id, string content)
+        => _ = ChatWebView.UpdateContentAsync(id, content);
+
+    private void OnMessageStatusUpdated(string id, OutputItemStatus status, string expanderTitle)
+        => _ = ChatWebView.UpdateStatusAsync(id, status, expanderTitle);
+
+    private void OnMessageBodySet(string id, string body, OutputBodyMode mode)
+        => _ = ChatWebView.SetBodyAsync(id, body, mode);
+
+    private void OnMessageCompleted(string id)
+        => _ = ChatWebView.CompleteMessageAsync(id);
+
+    private void OnAllCleared()
+        => _ = ChatWebView.ClearAllAsync();
+
+    private void OnMessagesRestored(System.Collections.Generic.IEnumerable<ChatMessageData> messages)
+        => _ = ChatWebView.LoadMessagesAsync(messages);
 
     private void OnThemeChanged(ThemeChangedEventArgs e)
     {
@@ -368,6 +604,10 @@ public partial class ChatSessionControl : UserControl
 
     private void InputTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
+        // Outside the suppression guard: the composer is also cleared and
+        // repopulated programmatically, and the styling has to follow that too.
+        UpdateCommandHighlight();
+
         if (_suppressTextChanged) return;
 
         var text = InputTextBox.Text ?? "";
@@ -461,7 +701,28 @@ public partial class ChatSessionControl : UserControl
                     e.Handled = true;
                     break;
                 case Key.Enter:
+                    // Take the highlight when it completes what was typed;
+                    // otherwise Enter means "send exactly what I wrote". Falling
+                    // through unhandled would let the TextBox insert a newline
+                    // instead, which is neither.
+                    if (CommitMentionSelection())
+                    {
+                        e.Handled = true;
+                        break;
+                    }
+
+                    CloseMentionPopup();
+                    if (DataContext is ChatSessionViewModel typedVm
+                        && typedVm.SendCommand.CanExecute(null))
+                    {
+                        typedVm.SendCommand.Execute(null);
+                    }
+                    e.Handled = true;
+                    break;
+
                 case Key.Tab:
+                    // Completion only — Tab never sends, so a rejected highlight
+                    // simply does nothing and leaves the popup open.
                     if (CommitMentionSelection()) e.Handled = true;
                     break;
                 case Key.Escape:
@@ -544,12 +805,39 @@ public partial class ChatSessionControl : UserControl
 
     private bool CommitMentionSelection()
     {
-        if (MentionList.SelectedItem is MentionEntry entry)
-        {
-            CommitMention(entry);
-            return true;
-        }
-        return false;
+        if (MentionList.SelectedItem is not MentionEntry entry) return false;
+        if (!SelectionMatchesTypedText(entry)) return false;
+
+        CommitMention(entry);
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the highlighted row is actually a completion of what has been
+    /// typed.
+    ///
+    /// The command list is filtered asynchronously, so between keystrokes the
+    /// highlight can still be sitting on an earlier candidate. Committing that
+    /// used to leave the wrong text in the composer, which was visible and
+    /// recoverable; now that picking a command runs it, it would silently
+    /// execute something the user never chose — typing /compact and getting
+    /// /usage.
+    /// </summary>
+    private bool SelectionMatchesTypedText(MentionEntry entry)
+    {
+        var text = InputTextBox.Text ?? "";
+        var caret = InputTextBox.CaretIndex;
+
+        if (_mentionStart < 0 || _mentionStart > caret || caret > text.Length) return false;
+
+        var typed = text.Substring(_mentionStart, caret - _mentionStart);
+
+        // Nothing typed past the trigger: the highlight is the only intent
+        // expressed, so it stands.
+        if (typed.Length == 0) return true;
+
+        var candidate = (entry.InsertText ?? "").Trim().TrimStart('/', '@');
+        return candidate.StartsWith(typed, StringComparison.OrdinalIgnoreCase);
     }
 
     private void CommitMention(MentionEntry entry)
@@ -585,7 +873,64 @@ public partial class ChatSessionControl : UserControl
             _suppressTextChanged = false;
         }
 
+        var wasCommand = _triggerChar == '/';
         CloseMentionPopup();
+        UpdateCommandHighlight();
+
+        // Picking a command from the list is the whole intent — there is nothing
+        // left to type, so run it rather than parking it in the composer and
+        // waiting for Enter. A file mention is the opposite: it is one argument
+        // in a sentence the user is still writing.
+        if (wasCommand && IsBareCommand(InputTextBox.Text))
+        {
+            if (DataContext is ChatSessionViewModel vm && vm.SendCommand.CanExecute(null))
+                vm.SendCommand.Execute(null);
+        }
+    }
+
+    /// <summary>
+    /// True when the composer holds a slash command and nothing else — no
+    /// arguments and no prose around it.
+    /// </summary>
+    private static bool IsBareCommand(string? text)
+    {
+        var trimmed = (text ?? "").Trim();
+        return trimmed.Length > 1
+            && trimmed[0] == '/'
+            && trimmed.IndexOf(' ') < 0
+            && trimmed.IndexOf('\n') < 0;
+    }
+
+    /// <summary>
+    /// Paints a bare slash command in the composer so it reads as a command
+    /// rather than as the first word of a message.
+    ///
+    /// The whole box is styled rather than just the token: a WPF TextBox has one
+    /// Foreground for all its text, and per-run formatting would mean swapping
+    /// in a RichTextBox — which would take the caret arithmetic the @ and /
+    /// pickers depend on with it. Since a bare command IS the entire input, the
+    /// distinction is not visible. As soon as an argument is typed the styling
+    /// drops, so arguments never masquerade as part of the command.
+    /// </summary>
+    private void UpdateCommandHighlight()
+    {
+        var isCommand = IsBareCommand(InputTextBox.Text);
+
+        if (isCommand)
+        {
+            // SetResourceReference, not a plain assignment: a local value would
+            // outrank the DynamicResource declared in XAML and freeze the
+            // composer on one palette across a light/dark switch.
+            InputTextBox.SetResourceReference(ForegroundProperty, "FpCommand");
+            InputTextBox.FontWeight = FontWeights.SemiBold;
+        }
+        else
+        {
+            // Clear rather than set back: this restores the binding the XAML
+            // declared, so normal text keeps following the theme.
+            InputTextBox.ClearValue(ForegroundProperty);
+            InputTextBox.ClearValue(FontWeightProperty);
+        }
     }
 
     private void ShowMentionPopup(string filter)
@@ -652,13 +997,20 @@ public partial class ChatSessionControl : UserControl
             ApplyMentionFilter(filter);
     }
 
-    /// <summary>Commands handled in ChatSessionViewModel rather than by the CLI.</summary>
+    /// <summary>
+    /// Commands offered in the "/" picker beyond whatever the workspace defines
+    /// in <c>.claude/commands</c>.
+    ///
+    /// Mixed on purpose: <c>clear</c> and <c>help</c> are handled in the view
+    /// model, the rest are passed straight to Claude Code, which answers them
+    /// in print mode. They are listed here only because the CLI does not
+    /// enumerate its own built-ins for the picker to discover.
+    /// </summary>
     private static readonly (string Name, string Description)[] LocalCommands =
     {
         ("clear", "Clear this conversation"),
-        ("cost", "Show tokens and cost for this session"),
-        ("usage", "Show tokens and cost for this session"),
-        ("help", "What works here, and what doesn't"),
+        ("usage", "Subscription usage — session and weekly limits"),
+        ("compact", "Summarise the conversation to free up context"),
     };
 
     private void CloseMentionPopup()

@@ -31,6 +31,12 @@
     <SolidColorBrush x:Key="FpError"           Color="#D98A8A"/>
     <SolidColorBrush x:Key="FpSelection"       Color="#43413A"/>
 
+    <!-- Slash commands in the composer. Blue rather than the terracotta accent:
+         the accent already means "Claude is acting", and a command the user has
+         typed but not yet sent is a different thing. Lifted for contrast against
+         the dark surface. -->
+    <SolidColorBrush x:Key="FpCommand"          Color="#6FA8F5"/>
+
     <SolidColorBrush x:Key="FpCodeBackground"  Color="#1F1E1D"/>
 
 </ResourceDictionary>
