@@ -265,22 +265,53 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
     }
 
     /// <summary>
+    /// Appends to %AppData%\ForgePilot\logs\window-*.log.
+    ///
+    /// Deliberately not Serilog: Log.Logger is only configured inside
+    /// CreateChatViewModel, so nothing on the window-open path before that
+    /// point would be recorded — which is exactly the stretch that has been
+    /// failing silently. This writes unconditionally and never throws.
+    /// </summary>
+    private static void LogWindow(string message)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "ForgePilot", "logs");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(
+                Path.Combine(dir, $"window-{DateTime.Now:yyyyMMdd}.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Diagnostics must never break the thing they are diagnosing.
+        }
+    }
+
+    /// <summary>
     /// Opens the single chat window, resuming the most recently used session.
     /// Only creates a session when there are none — otherwise every reload
     /// would leave behind another empty one.
     /// </summary>
     public static async Task ShowChatSessionWindowAsync()
     {
-        if (_instance is null) return;
+        LogWindow("ShowChatSessionWindowAsync: entered");
+
+        if (_instance is null) { LogWindow("  ABORT: package instance is null"); return; }
 
         await _instance.JoinableTaskFactory.SwitchToMainThreadAsync();
 
         var vm = _instance._sessionListViewModel;
-        if (vm is null) return;
+        if (vm is null) { LogWindow("  ABORT: session list view model is null (package init failed?)"); return; }
+
+        LogWindow($"  sessions={vm.Sessions.Count} workspace={_instance._solutionDirectory}");
 
         if (vm.Sessions.Count == 0)
         {
             // NewSessionCommand raises SessionOpenRequested, which loads it.
+            LogWindow("  no sessions -> NewSessionCommand");
             vm.NewSessionCommand.Execute(null);
             return;
         }
@@ -296,13 +327,16 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
     private static async Task OpenOrActivateSessionAsync(SessionInfo session)
     {
-        if (_instance is null) return;
+        LogWindow($"OpenOrActivateSession: '{session.Name}' id={session.Id}");
+
+        if (_instance is null) { LogWindow("  ABORT: package instance is null"); return; }
 
         await _instance.JoinableTaskFactory.SwitchToMainThreadAsync();
 
         // Already showing this session — just focus the window.
         if (_instance._activeSessionId == session.Id)
         {
+            LogWindow("  already active -> focusing existing frame");
             try
             {
                 var existing = await _instance.ShowToolWindowAsync(
@@ -311,11 +345,16 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
                 if (existing?.Frame is IVsWindowFrame existingFrame)
                 {
                     existingFrame.Show();
+                    LogWindow("  frame shown");
+                }
+                else
+                {
+                    LogWindow("  WARN: no frame on the existing window");
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"ForgePilot: Failed to activate session window: {ex}");
+                LogWindow($"  ERROR activating: {ex}");
             }
             return;
         }
@@ -324,7 +363,12 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
         // Serialize with a gate — concurrent WebView2 init deadlocks the UI
         // thread. WaitAsync(0) drops rapid clicks rather than queueing them.
         if (!await _openSessionGate.WaitAsync(0))
+        {
+            // If a previous attempt died without releasing, every later click
+            // lands here and does nothing visible — worth naming explicitly.
+            LogWindow("  ABORT: open gate already held (previous open still running or leaked)");
             return;
+        }
 
         try
         {
@@ -349,8 +393,10 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
 
             _instance._activeSessionId = session.Id;
 
+            LogWindow("  creating tool window...");
             var window = await _instance.ShowToolWindowAsync(
                 typeof(ChatSessionToolWindow), ChatWindowId, true, _instance.DisposalToken);
+            LogWindow($"  tool window: {(window is null ? "NULL - ShowToolWindowAsync returned nothing" : window.GetType().Name)}");
 
             if (window is not null)
             {
@@ -431,6 +477,11 @@ public sealed class ForgePilotPackage : AsyncPackage, IVsSolutionEvents
                         session.IsActive = false;
                         viewModel.Dispose();
                     };
+                }
+
+                if (window.Frame is not IVsWindowFrame)
+                {
+                    LogWindow("  ERROR: tool window has no frame - nothing will be shown");
                 }
 
                 if (window.Frame is IVsWindowFrame frame)
