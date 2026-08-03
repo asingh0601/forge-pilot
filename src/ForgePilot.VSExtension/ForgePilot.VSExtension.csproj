@@ -101,6 +101,14 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
 
+    <!-- The Marketplace listing body, referenced by the
+         Microsoft.VisualStudio.Services.Content.Details asset. Same rule as
+         LICENSE: referenced by the manifest, so it has to be in the package. -->
+    <Content Include="overview.md">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
     <!-- Kept but NOT compiled. VSCTCompile needs VSSDK targets that only run
          with the extension development workload, and even then the menu it
          produces depends on a cache rebuild that this VS install never

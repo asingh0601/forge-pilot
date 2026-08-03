@@ -49,5 +49,10 @@
   <Assets>
     <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="Project" d:ProjectName="ForgePilot.VSExtension" Path="|ForgePilot.VSExtension;PkgdefProjectOutputGroup|" />
     <Asset Type="Microsoft.VisualStudio.MefComponent" d:Source="Project" d:ProjectName="ForgePilot.VSExtension" Path="|ForgePilot.VSExtension|" />
+
+    <!-- Marketplace listing body. Only read when the package is published; it
+         is inert for a local install, but shipping it in the VSIX keeps the
+         listing and the build from drifting apart. -->
+    <Asset Type="Microsoft.VisualStudio.Services.Content.Details" d:Source="File" Path="overview.md" />
   </Assets>
 </PackageManifest>
